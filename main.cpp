@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <time.h>
 #include "tdmsync.h"
 
 void exit_filenotfound() {
@@ -51,6 +52,7 @@ int main(int argc, char **argv) {
     std::string dataFn = argv[2];
     std::string metaFn = dataFn + ".tdmsync";
 
+    int starttime = clock();
     try {
         if (prepare) {
             int blockSize = argc >= 4 ? atoi(argv[3]) : 4096;
@@ -73,6 +75,9 @@ int main(int argc, char **argv) {
         printf("Exception!\n");
         printf("%s\n", e.what());
     }
+    int deltatime = clock() - starttime;
+
+    printf("Finished in %0.2lf sec\n", double(deltatime) / CLOCKS_PER_SEC);
 
     return 0;
 }

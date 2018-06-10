@@ -67,7 +67,7 @@ const uint32_t buzhash_table[256] = {
     0x7bf7cabc, 0xf9c18d66, 0x593ade65, 0xd95ddf11,
 };
 
-static inline uint32_t rol(uint32_t v, uint32_t s) {
+static INLINE uint32_t rol(uint32_t v, uint32_t s) {
     s &= 31;
     if (s == 0) return v;
     return (v << s) ^ (v >> (32 - s));
