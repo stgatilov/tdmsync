@@ -5,7 +5,14 @@
 
 #include "sha1.h"
 #include "buzhash.h"
-#include "binsearch.h"
+
+#define USE_PHF
+
+#ifndef USE_PHF
+    #include "binsearch.h"
+#else
+    #include "phf.h"
+#endif
 
 
 namespace TdmSync {
@@ -142,8 +149,13 @@ UpdatePlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) 
         for (int i = 0; i < num; i++)
             checksums[i] = blocks[i].chksum;
         TdmSyncAssert(std::is_sorted(checksums.begin(), checksums.end()));
+        #ifdef USE_PHF
+        TdmPhf::PerfectHashFunc perfecthash;
+        perfecthash.create(checksums.data(), num);
+        #else
         tdm_bsb_info binsearcher;
         binary_search_branchless_precompute(&binsearcher, num);
+        #endif
 
         uint32_t currChksum = checksumCompute(&fileContents[0], blockSize);
         std::vector<char> foundBlocks(blocks.size(), false);
@@ -152,30 +164,39 @@ UpdatePlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) 
         for (int64_t offset = 0; offset + blockSize <= srcFileSize; offset++) {
             //if ((offset & ((1<<20)-1)) == 0) fprintf(stderr, "%d\n", (int)offset);
             uint32_t digest = checksumDigest(currChksum);
-            uint32_t left = binary_search_branchless_run(&binsearcher, checksums.data(), digest);
-            uint32_t right = left;
-            while (right < checksums.size() && checksums[right] == digest)
-                right++;
 
-            sumCount += (right - left);
-            int newFound = 0;
-            for (int j = left; j < right; j++) if (!foundBlocks[j])
-                newFound++;
+            #ifdef USE_PHF
+            size_t idx = perfecthash.evaluate(digest);
+            #else
+            size_t idx = binary_search_branchless_run(&binsearcher, checksums.data(), digest);
+            #endif
 
-            if (newFound > 0) {
-                uint8_t currHash[BlockInfo::HASH_SIZE];
-                hashCompute(currHash, &fileContents[offset], blockSize);
-                for (int j = left; j < right; j++) if (!foundBlocks[j]) {
-                    if (memcmp(blocks[j].hash, currHash, sizeof(currHash)) != 0)
-                        continue;
+            if (idx < num && checksums[idx] == digest) {
+                uint32_t left = idx;
+                uint32_t right = left;
+                while (right < num && checksums[right] == digest)
+                    right++;
 
-                    foundBlocks[j] = true;
-                    SegmentUse seg;
-                    seg.srcOffset = offset;
-                    seg.dstOffset = blocks[j].offset;
-                    seg.size = blockSize;
-                    seg.remote = false;
-                    result.segments.push_back(seg);
+                sumCount += (right - left);
+                int newFound = 0;
+                for (int j = left; j < right; j++) if (!foundBlocks[j])
+                    newFound++;
+
+                if (newFound > 0) {
+                    uint8_t currHash[BlockInfo::HASH_SIZE];
+                    hashCompute(currHash, &fileContents[offset], blockSize);
+                    for (int j = left; j < right; j++) if (!foundBlocks[j]) {
+                        if (memcmp(blocks[j].hash, currHash, sizeof(currHash)) != 0)
+                            continue;
+
+                        foundBlocks[j] = true;
+                        SegmentUse seg;
+                        seg.srcOffset = offset;
+                        seg.dstOffset = blocks[j].offset;
+                        seg.size = blockSize;
+                        seg.remote = false;
+                        result.segments.push_back(seg);
+                    }
                 }
             }
 
