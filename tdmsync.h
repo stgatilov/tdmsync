@@ -20,7 +20,7 @@ struct SyncPlan {
 struct BlockInfo {
     int64_t offset = 0;
     uint32_t chksum = 0;
-    uint8_t hash[20] = {0};
+    uint8_t hash[20];
 };
 #pragma pack(pop)
 

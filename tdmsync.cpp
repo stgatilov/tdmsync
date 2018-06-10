@@ -149,7 +149,7 @@ SyncPlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) co
         std::vector<bool> foundBlocks(blocks.size(), false);
 
         for (int64_t offset = 0; offset + blockSize <= srcFileSize; offset++) {
-            if ((offset & ((1<<20)-1)) == 0) fprintf(stderr, "%d\n", (int)offset);
+            //if ((offset & ((1<<20)-1)) == 0) fprintf(stderr, "%d\n", (int)offset);
             uint32_t digest = checksumDigest(currChksum);
             int left = binary_search_branchless_run(&binsearcher, checksums.data(), digest);
             int right = left;
