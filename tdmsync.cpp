@@ -1,5 +1,4 @@
 #include "tdmsync.h"
-#include <stdio.h>
 #include <inttypes.h>
 #include <vector>
 #include <algorithm>
@@ -219,6 +218,18 @@ SyncPlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) co
     }
 
     return result;
+}
+
+//===========================================================================
+
+void SyncPlan::print(FILE *f) const {
+    fprintf(f, "Total bytes:  local=%" PRId64 "  remote=%" PRId64 "\n", bytesLocal, bytesRemote);
+    fprintf(f, "Segments = %d:\n", (int)segments.size());
+    for (int i = 0; i < segments.size(); i++) {
+        const auto &seg = segments[i];
+        fprintf(f, "  %c %08X: %08" PRIX64 " <- %08" PRIX64 "\n", (seg.remote ? 'R' : 'L'), (int)seg.size, seg.dstOffset, seg.srcOffset);
+    }
+    fprintf(f, "\n");
 }
 
 }

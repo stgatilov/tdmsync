@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
             info.deserialize(metaBuf);
             auto dataBuf = readFile(dataFn);
             auto plan = info.createUpdatePlan(dataBuf);
-            printf("%d %d %d\n", (int)plan.segments.size(), (int)plan.bytesLocal, (int)plan.bytesRemote);
+            plan.print();
         }
     }
     catch(const std::exception &e) {
