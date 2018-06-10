@@ -258,4 +258,23 @@ void UpdatePlan::print(FILE *f) const {
     fprintf(f, "\n");
 }
 
+std::vector<uint8_t> UpdatePlan::apply(const std::vector<uint8_t> &localData, const std::vector<uint8_t> &remoteData) const {
+    uint64_t resSize = 0;
+    if (!segments.empty()) {
+        const auto &last = segments.back();
+        resSize = last.dstOffset + last.size;
+    }
+    std::vector<uint8_t> result(resSize, 0xFFU);
+
+    for (int i = 0; i < segments.size(); i++) {
+        const auto &seg = segments[i];
+        const auto &fromData = seg.remote ? remoteData : localData;
+        TdmSyncAssert(seg.dstOffset + seg.size <= result.size());
+        TdmSyncAssert(seg.srcOffset + seg.size <= fromData.size());
+        memcpy(result.data() + seg.dstOffset, fromData.data() + seg.srcOffset, seg.size);
+    }
+
+    return result;
+}
+
 }
