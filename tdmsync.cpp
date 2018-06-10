@@ -145,7 +145,7 @@ SyncPlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) co
         binary_search_branchless_precompute(&binsearcher, checksums.size());
 
         uint32_t currChksum = checksumCompute(&fileContents[0], blockSize);
-        std::vector<bool> foundBlocks(blocks.size(), false);
+        std::vector<char> foundBlocks(blocks.size(), false);
 
         for (int64_t offset = 0; offset + blockSize <= srcFileSize; offset++) {
             //if ((offset & ((1<<20)-1)) == 0) fprintf(stderr, "%d\n", (int)offset);
@@ -160,10 +160,10 @@ SyncPlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) co
                 newFound++;
 
             if (newFound > 0) {
-                BlockInfo tmp;
-                hashCompute(tmp.hash, &fileContents[offset], blockSize);
+                uint8_t currHash[BlockInfo::HASH_SIZE];
+                hashCompute(currHash, &fileContents[offset], blockSize);
                 for (int j = left; j < right; j++) if (!foundBlocks[j]) {
-                    if (memcmp(blocks[j].hash, tmp.hash, sizeof(tmp.hash)) != 0)
+                    if (memcmp(blocks[j].hash, currHash, sizeof(currHash)) != 0)
                         continue;
 
                     foundBlocks[j] = true;

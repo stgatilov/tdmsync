@@ -21,9 +21,10 @@ struct SyncPlan {
 
 #pragma pack(push, 1)
 struct BlockInfo {
+    static const int HASH_SIZE = 20;
     int64_t offset = 0;
     uint32_t chksum = 0;
-    uint8_t hash[20];
+    uint8_t hash[HASH_SIZE];
 };
 #pragma pack(pop)
 
