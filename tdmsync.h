@@ -17,6 +17,7 @@ struct UpdatePlan {
     int64_t bytesRemote = 0;
 
     void print(FILE *f = stdout) const;
+    std::vector<uint8_t> apply(const std::vector<uint8_t> &localData, const std::vector<uint8_t> &remoteData) const;
 };
 
 #pragma pack(push, 1)

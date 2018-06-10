@@ -56,19 +56,30 @@ int main(int argc, char **argv) {
     try {
         if (prepare) {
             int blockSize = argc >= 4 ? atoi(argv[3]) : 4096;
+
             auto dataBuf = readFile(dataFn);
             TdmSync::FileInfo info;
             info.computeFromFile(dataBuf, blockSize);
+
             auto metaBuf = info.serialize();
             writeFile(metaFn, metaBuf);
         }
         else {
+            if (argc < 4) exit_usage();
+            std::string localFn = argv[3];
+
             auto metaBuf = readFile(metaFn);
             TdmSync::FileInfo info;
             info.deserialize(metaBuf);
-            auto dataBuf = readFile(dataFn);
-            auto plan = info.createUpdatePlan(dataBuf);
+
+            auto localBuf = readFile(localFn);
+            auto plan = info.createUpdatePlan(localBuf);
             plan.print();
+            printf("Analysis tool %0.2lf sec\n", double(clock() - starttime) / CLOCKS_PER_SEC);
+
+            auto remoteBuf = readFile(dataFn);
+            auto resultData = plan.apply(localBuf, remoteBuf);
+            writeFile(localFn, resultData);
         }
     }
     catch(const std::exception &e) {
