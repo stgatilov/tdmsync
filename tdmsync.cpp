@@ -132,29 +132,32 @@ bool operator< (const SegmentUse &a, const SegmentUse &b) {
         return int(a.remote) > int(b.remote);       //remote first
     return a.dstOffset < b.dstOffset;
 }
-SyncPlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) const {
+UpdatePlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) const {
     int64_t srcFileSize = fileContents.size();
-    SyncPlan result;
+    UpdatePlan result;
 
     if (srcFileSize >= blockSize) {
-        std::vector<uint32_t> checksums(blocks.size());
-        for (int i = 0; i < checksums.size(); i++)
+        size_t num = blocks.size();
+        std::vector<uint32_t> checksums(num);
+        for (int i = 0; i < num; i++)
             checksums[i] = blocks[i].chksum;
         TdmSyncAssert(std::is_sorted(checksums.begin(), checksums.end()));
         tdm_bsb_info binsearcher;
-        binary_search_branchless_precompute(&binsearcher, checksums.size());
+        binary_search_branchless_precompute(&binsearcher, num);
 
         uint32_t currChksum = checksumCompute(&fileContents[0], blockSize);
         std::vector<char> foundBlocks(blocks.size(), false);
+        uint64_t sumCount = 0;
 
         for (int64_t offset = 0; offset + blockSize <= srcFileSize; offset++) {
             //if ((offset & ((1<<20)-1)) == 0) fprintf(stderr, "%d\n", (int)offset);
             uint32_t digest = checksumDigest(currChksum);
-            int left = binary_search_branchless_run(&binsearcher, checksums.data(), digest);
-            int right = left;
+            uint32_t left = binary_search_branchless_run(&binsearcher, checksums.data(), digest);
+            uint32_t right = left;
             while (right < checksums.size() && checksums[right] == digest)
                 right++;
 
+            sumCount += (right - left);
             int newFound = 0;
             for (int j = left; j < right; j++) if (!foundBlocks[j])
                 newFound++;
@@ -179,6 +182,8 @@ SyncPlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) co
             if (offset + blockSize < srcFileSize)
                 currChksum = checksumUpdate(currChksum, fileContents[offset + blockSize], fileContents[offset]);
         }
+        double avgCandidates = double(sumCount) / double(srcFileSize - blockSize + 1.0);
+        //fprintf(stderr, "Average candidates per window: %0.3g\n", avgCandidates);
     }
 
     int n = 0;
@@ -222,7 +227,7 @@ SyncPlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) co
 
 //===========================================================================
 
-void SyncPlan::print(FILE *f) const {
+void UpdatePlan::print(FILE *f) const {
     fprintf(f, "Total bytes:  local=%" PRId64 "  remote=%" PRId64 "\n", bytesLocal, bytesRemote);
     fprintf(f, "Segments = %d:\n", (int)segments.size());
     for (int i = 0; i < segments.size(); i++) {

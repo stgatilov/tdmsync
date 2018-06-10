@@ -11,7 +11,7 @@ struct SegmentUse {
     bool remote = false;
 };
 
-struct SyncPlan {
+struct UpdatePlan {
     std::vector<SegmentUse> segments;
     int64_t bytesLocal = 0;
     int64_t bytesRemote = 0;
@@ -37,7 +37,7 @@ struct FileInfo {
     void deserialize(const std::vector<uint8_t> &infoContents);
 
     void computeFromFile(const std::vector<uint8_t> &fileContents, int blockSize);
-    SyncPlan createUpdatePlan(const std::vector<uint8_t> &fileContents) const;
+    UpdatePlan createUpdatePlan(const std::vector<uint8_t> &fileContents) const;
 };
 
 }
