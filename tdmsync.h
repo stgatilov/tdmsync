@@ -1,4 +1,5 @@
-#include <inttypes.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <vector>
 
 namespace TdmSync {
@@ -14,6 +15,8 @@ struct SyncPlan {
     std::vector<SegmentUse> segments;
     int64_t bytesLocal = 0;
     int64_t bytesRemote = 0;
+
+    void print(FILE *f = stdout) const;
 };
 
 #pragma pack(push, 1)
