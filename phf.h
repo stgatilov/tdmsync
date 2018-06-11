@@ -21,16 +21,26 @@ std::string assertFailedMessage(const char *code, const char *file, int line) {
 //almost-universal hash function for integers
 //https://en.wikipedia.org/wiki/Universal_hashing#Avoiding_modular_arithmetic
 struct IntegerUhf {
-    size_t mult = 0;
-    size_t shift = 0;
+    static const size_t PRIME = INT_MAX;
+
+    size_t multLo = 0, multHi = 0;
+    size_t addLo = 0, addHi = 0;
+    size_t mask = 0;
 
     void create(RndGen &rnd, size_t logSize) {
-        mult = std::uniform_int_distribution<size_t>(0, SIZE_MAX)(rnd);
-        logSize = std::max(logSize, size_t(1));
-        shift = 8 * sizeof(size_t) - logSize;
+        multLo = std::uniform_int_distribution<size_t>(0, PRIME - 1)(rnd);
+        multHi = std::uniform_int_distribution<size_t>(0, PRIME - 1)(rnd);
+        addLo = std::uniform_int_distribution<size_t>(0, PRIME - 1)(rnd);
+        addHi = std::uniform_int_distribution<size_t>(0, PRIME - 1)(rnd);
+        mask = (size_t(1) << logSize) - 1;
     }
+    //note: all keys must be less than 2^16 * PRIME ~= 2^46
     inline size_t evaluate (size_t key) const {
-        return (mult * key) >> shift;
+        size_t lo = key & 0xFFFFU;
+        size_t hi = key >> 16U;
+        size_t hashLo = (multLo * uint64_t(lo) + addLo) % PRIME;
+        size_t hashHi = (multHi * uint64_t(hi) + addHi) % PRIME;
+        return (hashLo ^ hashHi) & mask;
     }
 };
 
