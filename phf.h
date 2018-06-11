@@ -11,6 +11,13 @@ namespace TdmPhf {
 
 typedef std::mt19937 RndGen;
 
+std::string assertFailedMessage(const char *code, const char *file, int line) {
+    char buff[256];
+    sprintf(buff, "Assertion %s failed in %s on line %d", code, file, line);
+    return buff;
+}
+#define TdmPhfAssert(cond) if (!(cond)) throw std::runtime_error(assertFailedMessage(#cond, __FILE__, __LINE__));
+
 //almost-universal hash function for integers
 //https://en.wikipedia.org/wiki/Universal_hashing#Avoiding_modular_arithmetic
 struct IntegerUhf {
@@ -58,13 +65,6 @@ struct PerfectHashFunc {
             funcs[0].create(rnd, logSize);
             funcs[1].create(rnd, logSize);
 
-            enum Status {
-                UNSEEN,
-                VISITED,
-                IGNORED,
-            };
-            std::vector<int> status(cells, UNSEEN);
-
             struct Edge {
                 size_t end;
                 size_t value;
@@ -73,10 +73,8 @@ struct PerfectHashFunc {
 
             for (size_t i = 0; i < num; i++) {
                 //detect and avoid duplicates (note: keys must be sorted)
-                if (i && keys[i] == keys[i-1]) {
-                    status[i] = IGNORED;
+                if (i && keys[i] == keys[i-1])
                     continue;
-                }
                 uint32_t key = keys[i];
                 size_t a = funcs[0].evaluate(key);
                 size_t b = funcs[1].evaluate(key);
@@ -87,21 +85,21 @@ struct PerfectHashFunc {
             data.assign(cells, 0);
             ok = true;
 
+            std::vector<char> visited(cells, false);
             //series of BFS over graph
-            std::vector<size_t> qarr;
-            for (size_t s = 0; ok && s < cells; s++) if (status[s] == UNSEEN) {
+            for (size_t s = 0; ok && s < cells; s++) if (!visited[s]) {
                 data[s] = 0;
-                status[s] = VISITED;
-                qarr.clear();
+                visited[s] = true;
+                std::vector<size_t> qarr;
                 qarr.push_back(s);
 
                 for (size_t i = 0; ok && i < qarr.size(); i++) {
                     size_t u = qarr[i];
                     for (const Edge &e : edgeLists[u]) {
                         size_t v = e.end;
-                        if (status[v] == UNSEEN) {
+                        if (!visited[v]) {
                             data[v] = e.value ^ data[u];
-                            status[v] = VISITED;
+                            visited[v] = true;
                             qarr.push_back(v);
                         }
                         if ((data[u] ^ data[v]) != e.value)
@@ -111,12 +109,10 @@ struct PerfectHashFunc {
             }
 
             if (ok) {
-                for (size_t i = 0; i < num; i++) if (status[i] != IGNORED) {
-                    if (evaluate(keys[i]) != i) {
-                        char buff[256];
-                        sprintf(buff, "Error: %d -> %d != %d\n", (int)i, (int)evaluate(keys[i]), (int)keys[i]);
-                        throw std::runtime_error(buff);
-                    }
+                for (size_t i = 0; i < num; i++) {
+                    if (i && keys[i] == keys[i-1])
+                        continue;
+                    TdmPhfAssert(evaluate(keys[i]) == i);
                 }
             }
 
