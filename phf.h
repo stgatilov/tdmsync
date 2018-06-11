@@ -53,11 +53,12 @@ struct PerfectHashFunc {
     }
 
     void create(const uint32_t *keys, size_t num) {
-        logSize = 1;
+        logSize = 5;
         while ((1ULL << logSize) < 3 * num)
             logSize++;
         size_t cells = 1ULL << logSize;
         mask = cells - 1;
+        //fprintf(stderr, "%d / %d\n", (int)num, (int)cells);
 
         RndGen rnd;
         bool ok;
