@@ -1,5 +1,7 @@
+#ifndef _TDM_SYNC_H_028848_
+#define _TDM_SYNC_H_028848_
+
 #include <stdint.h>
-#include <stdio.h>
 #include <vector>
 
 namespace TdmSync {
@@ -16,7 +18,7 @@ struct UpdatePlan {
     int64_t bytesLocal = 0;
     int64_t bytesRemote = 0;
 
-    void print(FILE *f = stdout) const;
+    void print() const;
     std::vector<uint8_t> apply(const std::vector<uint8_t> &localData, const std::vector<uint8_t> &remoteData) const;
 };
 
@@ -42,3 +44,5 @@ struct FileInfo {
 };
 
 }
+
+#endif
