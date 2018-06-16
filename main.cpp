@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <time.h>
 #include "tdmsync.h"
+#include "fileio.h"
+
 
 void exit_filenotfound() {
     fprintf(stderr, "File not found!");
@@ -13,24 +15,24 @@ void exit_usage() {
 }
 
 std::vector<uint8_t> readFile(const std::string &fn) {
-    FILE *fh = fopen(fn.c_str(), "rb");
-    if (!fh) exit_filenotfound();
-    fseek(fh, 0, SEEK_END);
-    size_t filelen = ftell(fh);
-    rewind(fh);
+    using namespace TdmSync;
+    StdioFile fh;
+    if (!fh.open(fn.c_str(), StdioFile::Read))
+        exit_filenotfound();
+    size_t filelen = fh.getSize();
 
     std::vector<uint8_t> buffer(filelen);
-    fread(buffer.data(), filelen, 1, fh);
-    fclose(fh);
+    fh.read(buffer.data(), filelen);
     return buffer;
 }
 
 void writeFile(const std::string &fn, const std::vector<uint8_t> &buffer) {
-    FILE *fh = fopen(fn.c_str(), "wb");
-    if (!fh) exit_filenotfound();
+    using namespace TdmSync;
+    StdioFile fh;
+    if (!fh.open(fn.c_str(), StdioFile::Write))
+        exit_filenotfound();
     size_t filelen = buffer.size();
-    fwrite(buffer.data(), filelen, 1, fh);
-    fclose(fh);
+    fh.write(buffer.data(), filelen);
 }
 
 

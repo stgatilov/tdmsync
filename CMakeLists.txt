@@ -6,6 +6,8 @@ set(CMAKE_CONFIGURATION_TYPES "Debug;RelWithDebInfo" CACHE STRING "" FORCE)
 set(lib_sources
     tdmsync.h
     tdmsync.cpp
+    fileio.h
+    fileio.cpp
     tsassert.h
     tsassert.cpp
     sha1.c
