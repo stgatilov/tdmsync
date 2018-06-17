@@ -183,15 +183,15 @@ UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
                 }
             }
 
-            if (offset + blockSize < srcFileSize) {
-                if (buffPtr == buffer.size()) {
-                    size_t readmore = std::min((int64_t)buffer.size() - blockSize, fileSize - offset - blockSize);
-                    readToBuffer(rdFile, buffer, readmore);
-                    buffPtr -= readmore;
-                }
-                currChksum = checksumUpdate(currChksum, buffer[buffPtr], buffer[buffPtr - blockSize]);
-                buffPtr++;
+            if (offset + blockSize == srcFileSize)
+                break;
+            if (buffPtr == buffer.size()) {
+                size_t readmore = std::min((int64_t)buffer.size() - blockSize, fileSize - offset - blockSize);
+                readToBuffer(rdFile, buffer, readmore);
+                buffPtr -= readmore;
             }
+            currChksum = checksumUpdate(currChksum, buffer[buffPtr], buffer[buffPtr - blockSize]);
+            buffPtr++;
         }
         double avgCandidates = double(sumCount) / double(srcFileSize - blockSize + 1.0);
         //fprintf(stderr, "Average candidates per window: %0.3g\n", avgCandidates);
