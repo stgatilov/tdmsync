@@ -3,6 +3,8 @@
 #include <vector>
 #include <algorithm>
 
+#include "tsassert.h"
+
 #include "sha1.h"
 #include "buzhash.h"
 
@@ -16,13 +18,6 @@
 
 
 namespace TdmSync {
-
-std::string assertFailedMessage(const char *code, const char *file, int line) {
-    char buff[256];
-    sprintf(buff, "Assertion %s failed in %s on line %d", code, file, line);
-    return buff;
-}
-#define TdmSyncAssert(cond) if (!(cond)) throw std::runtime_error(assertFailedMessage(#cond, __FILE__, __LINE__));
 
 //===========================================================================
 
