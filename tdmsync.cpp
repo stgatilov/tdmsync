@@ -43,69 +43,49 @@ void hashCompute(uint8_t hash[20], const uint8_t *bytes, uint32_t len) {
 
 //===========================================================================
 
-std::vector<uint8_t> FileInfo::serialize() const {
-    int blocksCount = blocks.size();
-    int64_t dataSize = sizeof(fileSize) + sizeof(blockSize) + sizeof(blocksCount) + blocks.size() * sizeof(BlockInfo);
-    TdmSyncAssert(dataSize < INT_MAX / 2);
+static const char MAGIC_STRING[] = "tdmsync.";
 
-    std::vector<uint8_t> data(dataSize);
-    int ptr = 0, sz;
+void FileInfo::serialize(BaseFile &wrFile) const {
+    wrFile.write(MAGIC_STRING, strlen(MAGIC_STRING));
 
-    sz = sizeof(fileSize);
-    memcpy(&data[ptr], &fileSize, sz);
-    ptr += sz;
+    uint64_t blocksCount = blocks.size();
+    wrFile.write(&fileSize, sizeof(fileSize));
+    wrFile.write(&blockSize, sizeof(blockSize));
+    wrFile.write(&blocksCount, sizeof(blocksCount));
+    wrFile.write(blocks.data(), blocksCount * sizeof(BlockInfo));
 
-    sz = sizeof(blockSize);
-    memcpy(&data[ptr], &blockSize, sz);
-    ptr += sz;
-
-    sz = sizeof(blocksCount);
-    memcpy(&data[ptr], &blocksCount, sz);
-    ptr += sz;
-
-    sz = blocks.size() * sizeof(BlockInfo);
-    memcpy(&data[ptr], blocks.data(), sz);
-    ptr += sz;
-
-    TdmSyncAssert(ptr == dataSize);
-    return data;
+    wrFile.write(MAGIC_STRING, strlen(MAGIC_STRING));
 }
 
-void FileInfo::deserialize(const std::vector<uint8_t> &data) {
-    int64_t dataSize = data.size();
-    int blocksCount;
-    TdmSyncAssert(dataSize >= sizeof(fileSize) + sizeof(blockSize) + sizeof(blocksCount));
+void FileInfo::deserialize(BaseFile &rdFile) {
+    char magic[sizeof(MAGIC_STRING)] = {0};
+    rdFile.read(magic, strlen(MAGIC_STRING));
+    TdmSyncAssert(strcmp(magic, MAGIC_STRING) == 0);
 
-    int ptr = 0, sz;
-
-    sz = sizeof(fileSize);
-    memcpy(&fileSize, &data[ptr], sz);
-    ptr += sz;
-
-    sz = sizeof(blockSize);
-    memcpy(&blockSize, &data[ptr], sz);
-    ptr += sz;
-
-    sz = sizeof(blocksCount);
-    memcpy(&blocksCount, &data[ptr], sz);
-    ptr += sz;
-
-    sz = blocksCount * sizeof(BlockInfo);
-    TdmSyncAssert(ptr + sz == dataSize);
+    uint64_t blocksCount;
+    rdFile.read(&fileSize, sizeof(fileSize));
+    rdFile.read(&blockSize, sizeof(blockSize));
+    rdFile.read(&blocksCount, sizeof(blocksCount));
     blocks.resize(blocksCount);
-    memcpy(blocks.data(), &data[ptr], sz);
-    ptr += sz;
+    rdFile.read(blocks.data(), blocksCount * sizeof(BlockInfo));
 
-    TdmSyncAssert(ptr == dataSize);
+    rdFile.read(magic, strlen(MAGIC_STRING));
+    TdmSyncAssert(strcmp(magic, MAGIC_STRING) == 0);
 }
 
+
+static void readToBuffer(BaseFile &rdFile, std::vector<uint8_t> &buffer, size_t readmore) {
+    memmove(buffer.data(), buffer.data() + readmore, buffer.size() - readmore);
+    rdFile.read(buffer.data() + buffer.size() - readmore, readmore);
+}
 
 bool operator< (const BlockInfo &a, const BlockInfo &b) {
     return a.chksum < b.chksum;
 }
-void FileInfo::computeFromFile(const std::vector<uint8_t> &fileContents, int blockSize) {
+void FileInfo::computeFromFile(BaseFile &rdFile, int blockSize) {
     this->blockSize = blockSize;
-    fileSize = fileContents.size();
+    fileSize = rdFile.getSize();
+    TdmSyncAssert(rdFile.tell() == 0);
     blocks.clear();
 
     if (fileSize < blockSize)
@@ -114,28 +94,32 @@ void FileInfo::computeFromFile(const std::vector<uint8_t> &fileContents, int blo
     int blockCount = (fileSize + blockSize-1) / blockSize;
     blocks.reserve(blockCount);
 
+    std::vector<uint8_t> buffer(blockSize);
+    int64_t offset = 0;
     for (int i = 0; i < blockCount; i++) {
-        int64_t offset = int64_t(i) * blockSize;
-        offset = std::min(offset, fileSize - blockSize);
+        int64_t readmore = std::min(fileSize - offset, int64_t(blockSize));
+        readToBuffer(rdFile, buffer, readmore);
+        offset += readmore;
 
         BlockInfo blk;
-        blk.offset = offset;
-        blk.chksum = checksumDigest(checksumCompute(&fileContents[offset], blockSize));
-        hashCompute(blk.hash, &fileContents[offset], blockSize);
+        blk.offset = offset - blockSize;
+        blk.chksum = checksumDigest(checksumCompute(buffer.data(), blockSize));
+        hashCompute(blk.hash, buffer.data(), blockSize);
 
         blocks.push_back(blk);
     }
+    TdmSyncAssert(offset == fileSize);
+    TdmSyncAssert(rdFile.tell() == fileSize);
 
     std::sort(blocks.begin(), blocks.end());
 }
 
 bool operator< (const SegmentUse &a, const SegmentUse &b) {
-    if (a.remote != b.remote)
-        return int(a.remote) > int(b.remote);       //remote first
     return a.dstOffset < b.dstOffset;
 }
-UpdatePlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) const {
-    int64_t srcFileSize = fileContents.size();
+UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
+    int64_t srcFileSize = rdFile.getSize();
+    TdmSyncAssert(rdFile.tell() == 0);
     UpdatePlan result;
 
     if (srcFileSize >= blockSize) {
@@ -152,9 +136,13 @@ UpdatePlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) 
         binary_search_branchless_precompute(&binsearcher, num);
         #endif
 
-        uint32_t currChksum = checksumCompute(&fileContents[0], blockSize);
+        std::vector<uint8_t> buffer(2 * blockSize);
+        readToBuffer(rdFile, buffer, std::min((int64_t)buffer.size(), fileSize));
+        uint32_t currChksum = checksumCompute(buffer.data(), blockSize);
+
         std::vector<char> foundBlocks(blocks.size(), false);
         uint64_t sumCount = 0;
+        size_t buffPtr = blockSize;
 
         for (int64_t offset = 0; offset + blockSize <= srcFileSize; offset++) {
             //if ((offset & ((1<<20)-1)) == 0) fprintf(stderr, "%d\n", (int)offset);
@@ -179,7 +167,7 @@ UpdatePlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) 
 
                 if (newFound > 0) {
                     uint8_t currHash[BlockInfo::HASH_SIZE];
-                    hashCompute(currHash, &fileContents[offset], blockSize);
+                    hashCompute(currHash, &buffer[buffPtr - blockSize], blockSize);
                     for (int j = left; j < right; j++) if (!foundBlocks[j]) {
                         if (memcmp(blocks[j].hash, currHash, sizeof(currHash)) != 0)
                             continue;
@@ -195,8 +183,15 @@ UpdatePlan FileInfo::createUpdatePlan(const std::vector<uint8_t> &fileContents) 
                 }
             }
 
-            if (offset + blockSize < srcFileSize)
-                currChksum = checksumUpdate(currChksum, fileContents[offset + blockSize], fileContents[offset]);
+            if (offset + blockSize < srcFileSize) {
+                if (buffPtr == buffer.size()) {
+                    size_t readmore = std::min((int64_t)buffer.size() - blockSize, fileSize - offset - blockSize);
+                    readToBuffer(rdFile, buffer, readmore);
+                    buffPtr -= readmore;
+                }
+                currChksum = checksumUpdate(currChksum, buffer[buffPtr], buffer[buffPtr - blockSize]);
+                buffPtr++;
+            }
         }
         double avgCandidates = double(sumCount) / double(srcFileSize - blockSize + 1.0);
         //fprintf(stderr, "Average candidates per window: %0.3g\n", avgCandidates);
@@ -253,8 +248,8 @@ void UpdatePlan::print() const {
     printf("\n");
 }
 
-std::vector<uint8_t> UpdatePlan::apply(const std::vector<uint8_t> &localData, const std::vector<uint8_t> &remoteData) const {
-    uint64_t resSize = 0;
+void UpdatePlan::apply(BaseFile &rdLocalFile, BaseFile &rdRemoteFile, BaseFile &wrResultFile) const {
+/*    uint64_t resSize = 0;
     if (!segments.empty()) {
         const auto &last = segments.back();
         resSize = last.dstOffset + last.size;
@@ -269,7 +264,7 @@ std::vector<uint8_t> UpdatePlan::apply(const std::vector<uint8_t> &localData, co
         memcpy(result.data() + seg.dstOffset, fromData.data() + seg.srcOffset, seg.size);
     }
 
-    return result;
+    return result;*/
 }
 
 }
