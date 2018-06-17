@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include <vector>
+#include "fileio.h"
+
 
 namespace TdmSync {
 
@@ -19,7 +21,7 @@ struct UpdatePlan {
     int64_t bytesRemote = 0;
 
     void print() const;
-    std::vector<uint8_t> apply(const std::vector<uint8_t> &localData, const std::vector<uint8_t> &remoteData) const;
+    void apply(BaseFile &rdLocalFile, BaseFile &rdRemoteFile, BaseFile &wrResultFile) const;
 };
 
 #pragma pack(push, 1)
@@ -36,11 +38,11 @@ struct FileInfo {
     int blockSize = 0;
     std::vector<BlockInfo> blocks;
 
-    std::vector<uint8_t> serialize() const;
-    void deserialize(const std::vector<uint8_t> &infoContents);
+    void serialize(BaseFile &wrFile) const;
+    void deserialize(BaseFile &rdFile);
 
-    void computeFromFile(const std::vector<uint8_t> &fileContents, int blockSize);
-    UpdatePlan createUpdatePlan(const std::vector<uint8_t> &fileContents) const;
+    void computeFromFile(BaseFile &rdFile, int blockSize);
+    UpdatePlan createUpdatePlan(BaseFile &rdFile) const;
 };
 
 }

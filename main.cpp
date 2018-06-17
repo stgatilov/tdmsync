@@ -3,6 +3,7 @@
 #include "tdmsync.h"
 #include "fileio.h"
 
+using namespace TdmSync;
 
 void exit_filenotfound() {
     fprintf(stderr, "File not found!");
@@ -12,27 +13,6 @@ void exit_filenotfound() {
 void exit_usage() {
     fprintf(stderr, "Wrong arguments!");
     exit(1);
-}
-
-std::vector<uint8_t> readFile(const std::string &fn) {
-    using namespace TdmSync;
-    StdioFile fh;
-    if (!fh.open(fn.c_str(), StdioFile::Read))
-        exit_filenotfound();
-    size_t filelen = fh.getSize();
-
-    std::vector<uint8_t> buffer(filelen);
-    fh.read(buffer.data(), filelen);
-    return buffer;
-}
-
-void writeFile(const std::string &fn, const std::vector<uint8_t> &buffer) {
-    using namespace TdmSync;
-    StdioFile fh;
-    if (!fh.open(fn.c_str(), StdioFile::Write))
-        exit_filenotfound();
-    size_t filelen = buffer.size();
-    fh.write(buffer.data(), filelen);
 }
 
 
@@ -59,29 +39,37 @@ int main(int argc, char **argv) {
         if (prepare) {
             int blockSize = argc >= 4 ? atoi(argv[3]) : 4096;
 
-            auto dataBuf = readFile(dataFn);
-            TdmSync::FileInfo info;
-            info.computeFromFile(dataBuf, blockSize);
+            StdioFile dataFile;
+            dataFile.open(dataFn.c_str(), StdioFile::Read);
+            FileInfo info;
+            info.computeFromFile(dataFile, blockSize);
 
-            auto metaBuf = info.serialize();
-            writeFile(metaFn, metaBuf);
+            StdioFile metaFile;
+            metaFile.open(metaFn.c_str(), StdioFile::Write);
+            info.serialize(metaFile);
         }
         else {
             if (argc < 4) exit_usage();
             std::string localFn = argv[3];
 
-            auto metaBuf = readFile(metaFn);
-            TdmSync::FileInfo info;
-            info.deserialize(metaBuf);
+            StdioFile metaFile;
+            metaFile.open(metaFn.c_str(), StdioFile::Read);
+            FileInfo info;
+            info.deserialize(metaFile);
 
-            auto localBuf = readFile(localFn);
-            auto plan = info.createUpdatePlan(localBuf);
+            StdioFile localFile;
+            localFile.open(localFn.c_str(), StdioFile::Read);
+            auto plan = info.createUpdatePlan(localFile);
             plan.print();
             printf("Analysis tool %0.2lf sec\n", double(clock() - starttime) / CLOCKS_PER_SEC);
 
-            auto remoteBuf = readFile(dataFn);
-            auto resultData = plan.apply(localBuf, remoteBuf);
-            writeFile(localFn, resultData);
+            StdioFile remoteFile;
+            remoteFile.open(dataFn.c_str(), StdioFile::Read);
+
+            std::string resultFn = localFn + ".updated";
+            StdioFile resultFile;
+            resultFile.open(resultFn.c_str(), StdioFile::Write);
+            plan.apply(localFile, remoteFile, resultFile);
         }
     }
     catch(const std::exception &e) {
