@@ -15,6 +15,8 @@ StdioFile::~StdioFile() {
 }
 
 void StdioFile::open(const char *filename, OpenMode mode) {
+    if (fh)
+        fclose((FILE*)fh);
     this->mode = mode;
     FILE *f = fopen(filename, mode == Read ? "rb" : "wb");
     TdmSyncAssertF(f, "Failed to open file %s for %s", filename, mode == Read ? "reading" : "writing");
