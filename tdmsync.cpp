@@ -186,7 +186,7 @@ UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
             if (offset + blockSize == srcFileSize)
                 break;
             if (buffPtr == buffer.size()) {
-                size_t readmore = std::min((int64_t)buffer.size() - blockSize, fileSize - offset - blockSize);
+                size_t readmore = std::min((int64_t)buffer.size() - blockSize, srcFileSize - offset - blockSize);
                 readToBuffer(rdFile, buffer, readmore);
                 buffPtr -= readmore;
             }
