@@ -33,6 +33,7 @@ int main(int argc, char **argv) {
 
     std::string dataFn = argv[2];
     std::string metaFn = dataFn + ".tdmsync";
+    std::string downFn = dataFn + ".download";
 
     int starttime = clock();
     try {
@@ -65,11 +66,15 @@ int main(int argc, char **argv) {
 
             StdioFile remoteFile;
             remoteFile.open(dataFn.c_str(), StdioFile::Read);
+            StdioFile downloadFile;
+            downloadFile.open(downFn.c_str(), StdioFile::Write);
+            plan.createDownloadFile(remoteFile, downloadFile);
+            downloadFile.open(downFn.c_str(), StdioFile::Read);
 
             std::string resultFn = localFn + ".updated";
             StdioFile resultFile;
             resultFile.open(resultFn.c_str(), StdioFile::Write);
-            plan.apply(localFile, remoteFile, resultFile);
+            plan.apply(localFile, downloadFile, resultFile);
         }
     }
     catch(const std::exception &e) {
