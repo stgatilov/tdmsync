@@ -9,8 +9,8 @@
 namespace TdmSync {
 
 struct SegmentUse {
-    int64_t srcOffset = 0;
     int64_t dstOffset = 0;
+    int64_t srcOffset = 0;
     int64_t size = 0;
     bool remote = false;
 };
@@ -21,7 +21,8 @@ struct UpdatePlan {
     int64_t bytesRemote = 0;
 
     void print() const;
-    void apply(BaseFile &rdLocalFile, BaseFile &rdRemoteFile, BaseFile &wrResultFile) const;
+    void apply(BaseFile &rdLocalFile, BaseFile &rdDownloadFile, BaseFile &wrResultFile) const;
+    void createDownloadFile(BaseFile &rdRemoteFile, BaseFile &wrDownloadFile) const;
 };
 
 #pragma pack(push, 1)

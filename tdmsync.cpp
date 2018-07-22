@@ -213,16 +213,18 @@ UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
     }
 
     int64_t lastCovered = 0;
+    int64_t downloadSize = 0;
     for (int i = 0; i <= n; i++) {
         int64_t offset = i < n ? result.segments[i].dstOffset : fileSize;
         int64_t size = i < n ? result.segments[i].size : 0;
         if (offset > lastCovered) {
             SegmentUse seg;
-            seg.srcOffset = lastCovered;
+            seg.srcOffset = downloadSize;
             seg.dstOffset = lastCovered;
             seg.size = offset - lastCovered;
             seg.remote = true;
             result.segments.push_back(seg);
+            downloadSize += seg.size;
         }
         lastCovered = offset + size;
     }
@@ -232,6 +234,7 @@ UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
         const auto &seg = result.segments[i];
         (seg.remote ? result.bytesRemote : result.bytesLocal) += seg.size;
     }
+    TdmSyncAssert(result.bytesRemote == downloadSize);
 
     return result;
 }
@@ -248,23 +251,40 @@ void UpdatePlan::print() const {
     printf("\n");
 }
 
-void UpdatePlan::apply(BaseFile &rdLocalFile, BaseFile &rdRemoteFile, BaseFile &wrResultFile) const {
-/*    uint64_t resSize = 0;
+static void copyfile(BaseFile &wr, BaseFile &rd, uint64_t size) {
+    uint8_t buffer[65536];
+    for (uint64_t pos = 0, chunk = 0; pos < size; pos += chunk) {
+        chunk = std::min(size_t(size - pos), sizeof(buffer));
+        rd.read(buffer, chunk);
+        wr.write(buffer, chunk);
+    }
+}
+
+void UpdatePlan::apply(BaseFile &rdLocalFile, BaseFile &rdDownloadFile, BaseFile &wrResultFile) const {
+    uint64_t resSize = 0;
     if (!segments.empty()) {
         const auto &last = segments.back();
         resSize = last.dstOffset + last.size;
     }
-    std::vector<uint8_t> result(resSize, 0xFFU);
 
     for (int i = 0; i < segments.size(); i++) {
         const auto &seg = segments[i];
-        const auto &fromData = seg.remote ? remoteData : localData;
-        TdmSyncAssert(seg.dstOffset + seg.size <= result.size());
-        TdmSyncAssert(seg.srcOffset + seg.size <= fromData.size());
-        memcpy(result.data() + seg.dstOffset, fromData.data() + seg.srcOffset, seg.size);
+        auto &srcFile = seg.remote ? rdDownloadFile : rdLocalFile;
+        wrResultFile.seek(seg.dstOffset);
+        srcFile.seek(seg.srcOffset);
+        copyfile(wrResultFile, srcFile, seg.size);
     }
+}
 
-    return result;*/
+void UpdatePlan::createDownloadFile(BaseFile &rdRemoteFile, BaseFile &wrDownloadFile) const {
+    for (int i = 0; i < segments.size(); i++) {
+        const auto &seg = segments[i];
+        if (seg.remote) {
+            TdmSyncAssert(wrDownloadFile.tell() == seg.srcOffset);
+            rdRemoteFile.seek(seg.dstOffset);
+            copyfile(wrDownloadFile, rdRemoteFile, seg.size);
+        }
+    }
 }
 
 }
