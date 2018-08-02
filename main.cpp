@@ -3,18 +3,16 @@
 #include "tdmsync.h"
 #include "fileio.h"
 
-using namespace TdmSync;
+#ifdef WITH_CURL
+#include <curl/curl.h>
+#endif
 
-void exit_filenotfound() {
-    fprintf(stderr, "File not found!");
-    exit(1);
-}
+using namespace TdmSync;
 
 void exit_usage() {
     fprintf(stderr, "Wrong arguments!");
     exit(1);
 }
-
 
 int main(int argc, char **argv) {
     if (argc < 3)
@@ -30,6 +28,15 @@ int main(int argc, char **argv) {
     else {
         exit_usage();
     }
+
+    #ifdef WITH_CURL
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        fprintf(stderr, "Failed to initialize curl");
+        exit(2);
+    }
+    #endif
 
     std::string dataFn = argv[2];
     std::string metaFn = dataFn + ".tdmsync";
@@ -52,6 +59,17 @@ int main(int argc, char **argv) {
         else {
             if (argc < 4) exit_usage();
             std::string localFn = argv[3];
+
+            #ifdef WITH_CURL
+            FILE *fp = fopen("downloaded.txt", "wt");
+            curl_easy_setopt(curl, CURLOPT_URL, "http://stackoverflow.com");
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, NULL);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
+            int res = curl_easy_perform(curl);
+            curl_easy_cleanup(curl);
+            fclose(fp);
+            exit(0);
+            #endif
 
             StdioFile metaFile;
             metaFile.open(metaFn.c_str(), StdioFile::Read);

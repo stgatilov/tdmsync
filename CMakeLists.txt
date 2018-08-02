@@ -1,6 +1,17 @@
 cmake_minimum_required (VERSION 3.9.6)
 project(tdmsync C CXX)
 
+option(WITH_CURL "Link with libcurl to support update from URL" ON)
+
+if(WITH_CURL)
+    include(conanbuildinfo.cmake)
+    conan_basic_setup()
+    set(LIBCURL_LIBS ${CONAN_LIBS} "crypt32.lib")
+    add_definitions(-DWITH_CURL)
+else()
+    set(LIBCURL_LIBS )
+endif()
+
 set(CMAKE_CONFIGURATION_TYPES "Debug;RelWithDebInfo" CACHE STRING "" FORCE)
 
 set(lib_sources
@@ -34,4 +45,4 @@ endif()
 add_library(libtdmsync ${lib_sources})
 
 add_executable(tdmsync ${test_sources})
-target_link_libraries(tdmsync libtdmsync)
+target_link_libraries(tdmsync libtdmsync ${LIBCURL_LIBS})
