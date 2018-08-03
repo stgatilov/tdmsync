@@ -61,10 +61,11 @@ int main(int argc, char **argv) {
             std::string localFn = argv[3];
 
             #ifdef WITH_CURL
-            FILE *fp = fopen("downloaded.txt", "wt");
-            curl_easy_setopt(curl, CURLOPT_URL, "http://stackoverflow.com");
+            FILE *fp = fopen("downloaded.txt", "wb");
+            curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:8000/tdm_ai_humanoid_females01.pk4.tdmsync");
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, NULL);
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
+            curl_easy_setopt(curl, CURLOPT_RANGE, "0-100,200-300");
             int res = curl_easy_perform(curl);
             curl_easy_cleanup(curl);
             fclose(fp);
