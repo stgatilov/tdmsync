@@ -5,7 +5,7 @@
 
 #ifdef WITH_CURL
 #include <curl/curl.h>
-CURL *curl = nullptr;
+#include "tdmsync_curl.h"
 #endif
 
 using namespace TdmSync;
@@ -81,8 +81,9 @@ void commandUpdate() {
         exit_usage();
     }
 
-    std::string dataFn = arguments[2];
-    std::string metaFn = dataFn + ".tdmsync";
+    std::string dataUri = arguments[2];
+    std::string metaUri = dataUri + ".tdmsync";
+    std::string metaFn = isLocal ? metaUri : "__temp.tdmsync";
     std::string localFn = arguments[3];
     std::string downFn = localFn + ".download";
     std::string resultFn = localFn + ".updated";
@@ -90,23 +91,21 @@ void commandUpdate() {
     fprintf(stderr, "Updating local file from %s file:\n", (isLocal ? "local" : "remote"));
     fprintf(stderr, "  %-40s  : local file to be updated\n", localFn.c_str());
     fprintf(stderr, "  %-40s  : updated version of local file\n", resultFn.c_str());
-    fprintf(stderr, "  %-40s  : source file to be synchronized with\n", dataFn.c_str());
-    fprintf(stderr, "  %-40s  : file with metainformation to be read\n", metaFn.c_str());
+    fprintf(stderr, "  %-40s  : source file to be synchronized with\n", dataUri.c_str());
+    fprintf(stderr, "  %-40s  : source file metainformation\n", metaUri.c_str());
+    fprintf(stderr, "  %-40s  : local file with metainformation to be read\n", metaUri.c_str());
     fprintf(stderr, "  %-40s  : data downloaded from source file\n", downFn.c_str());
 
     int starttime = clock();
     //=======================================
 
     #ifdef WITH_CURL
-    /*FILE *fp = fopen("downloaded.txt", "wb");
-    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:8000/tdm_ai_humanoid_females01.pk4.tdmsync");
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, NULL);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
-    curl_easy_setopt(curl, CURLOPT_RANGE, "0-100,200-300");
-    int res = curl_easy_perform(curl);
-    curl_easy_cleanup(curl);
-    fclose(fp);
-    exit(0);*/
+    if (!isLocal) {
+        StdioFile metaFile;
+        metaFile.open(metaFn.c_str(), StdioFile::Write);
+        CurlDownloader curlWrapper;
+        curlWrapper.downloadMeta(metaFile, metaUri.c_str());
+    }
     #endif
     
     StdioFile metaFile;
@@ -121,13 +120,22 @@ void commandUpdate() {
     plan.print();
     printf("Analysis took %0.2lf sec\n", double(clock() - analysis_starttime) / CLOCKS_PER_SEC);
     
-    StdioFile remoteFile;
-    remoteFile.open(dataFn.c_str(), StdioFile::Read);
+    if (isLocal) {
+        StdioFile remoteFile;
+        remoteFile.open(dataUri.c_str(), StdioFile::Read);
+        StdioFile downloadFile;
+        downloadFile.open(downFn.c_str(), StdioFile::Write);
+        plan.createDownloadFile(remoteFile, downloadFile);
+    }
+    else {
+        StdioFile downloadFile;
+        downloadFile.open(downFn.c_str(), StdioFile::Write);
+        CurlDownloader curlWrapper;
+        curlWrapper.downloadMissingParts(downloadFile, plan, dataUri.c_str());
+    }
+
     StdioFile downloadFile;
-    downloadFile.open(downFn.c_str(), StdioFile::Write);
-    plan.createDownloadFile(remoteFile, downloadFile);
     downloadFile.open(downFn.c_str(), StdioFile::Read);
-    
     StdioFile resultFile;
     resultFile.open(resultFn.c_str(), StdioFile::Write);
     plan.apply(localFile, downloadFile, resultFile);
@@ -147,11 +155,6 @@ int main(int argc, char **argv) {
 
     #ifdef WITH_CURL
     curl_global_init(CURL_GLOBAL_DEFAULT);
-    curl = curl_easy_init();
-    if (!curl) {
-        fprintf(stderr, "Failed to initialize curl\n");
-        exit(2);
-    }
     #endif
 
     try {
