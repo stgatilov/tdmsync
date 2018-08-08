@@ -30,7 +30,7 @@ void CurlDownloader::downloadMeta(BaseFile &wrDownloadFile, const char *url_) {
     auto plain_write_callback = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
         return ((CurlDownloader*)userdata)->plainWriteCallback(ptr, size, nmemb);
     };
-    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, (curl_write_callback)header_write_callback);
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void*)this);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, (curl_write_callback)plain_write_callback);
@@ -113,7 +113,7 @@ int CurlDownloader::performSingle() {
     auto single_write_callback = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
         return ((CurlDownloader*)userdata)->singleWriteCallback(ptr, size, nmemb);
     };
-    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, (curl_write_callback)header_write_callback);
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void*)this);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, (curl_write_callback)single_write_callback);
@@ -139,7 +139,7 @@ int CurlDownloader::performMulti() {
     auto single_write_callback = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
         return ((CurlDownloader*)userdata)->singleWriteCallback(ptr, size, nmemb);
     };
-    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, (curl_write_callback)header_write_callback);
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void*)this);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, (curl_write_callback)single_write_callback);
