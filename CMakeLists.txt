@@ -30,6 +30,11 @@ set(lib_sources
     phf.h
 )
 
+set(lib_curl_sources
+    tdmsync_curl.h
+    tdmsync_curl.cpp
+)
+
 set(test_sources
     main.cpp
 )
@@ -41,8 +46,10 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 endif()
 
+if(WITH_CURL)
+    set(lib_sources ${lib_sources} ${lib_curl_sources})
+endif()
 
 add_library(libtdmsync ${lib_sources})
-
 add_executable(tdmsync ${test_sources})
 target_link_libraries(tdmsync libtdmsync ${LIBCURL_LIBS})
