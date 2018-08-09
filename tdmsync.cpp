@@ -137,7 +137,7 @@ UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
         #endif
 
         std::vector<uint8_t> buffer(2 * blockSize);
-        readToBuffer(rdFile, buffer, std::min((int64_t)buffer.size(), srcFileSize));
+        rdFile.read(buffer.data(), std::min((int64_t)buffer.size(), srcFileSize));
         uint32_t currChksum = checksumCompute(buffer.data(), blockSize);
 
         std::vector<char> foundBlocks(blocks.size(), false);
