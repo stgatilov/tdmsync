@@ -58,6 +58,7 @@ void commandPrepare() {
     StdioFile metaFile;
     metaFile.open(metaFn.c_str(), StdioFile::Write);
     info.serialize(metaFile);
+    metaFile.flush();
 
     //===========================================
     int deltatime = clock() - starttime;
@@ -139,6 +140,7 @@ void commandUpdate() {
     StdioFile resultFile;
     resultFile.open(resultFn.c_str(), StdioFile::Write);
     plan.apply(localFile, downloadFile, resultFile);
+    resultFile.flush();
 
     //===========================================
     int deltatime = clock() - starttime;

@@ -14,6 +14,7 @@ public:
     virtual void seek(uint64_t pos) = 0;
     virtual uint64_t tell() = 0;
     virtual uint64_t getSize() = 0;
+    virtual void flush() = 0;
 };
 
 class StdioFile : public BaseFile {
@@ -29,6 +30,7 @@ public:
     virtual void seek(uint64_t pos) override;
     virtual uint64_t tell() override;
     virtual uint64_t getSize() override;
+    virtual void flush() override;
 
 private:
     OpenMode mode;

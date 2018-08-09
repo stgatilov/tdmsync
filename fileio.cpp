@@ -55,4 +55,10 @@ uint64_t StdioFile::getSize() {
     return len;
 }
 
+void StdioFile::flush() {
+    TdmSyncAssert(fh);
+    FILE *f = (FILE*)fh;
+    fflush(f);
+}
+
 }
