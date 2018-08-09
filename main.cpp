@@ -102,10 +102,12 @@ void commandUpdate() {
 
     #ifdef WITH_CURL
     if (!isLocal) {
+        int metadownload_starttime = clock();
         StdioFile metaFile;
         metaFile.open(metaFn.c_str(), StdioFile::Write);
         CurlDownloader curlWrapper;
         curlWrapper.downloadMeta(metaFile, metaUri.c_str());
+        printf("Downloaded %0.0lf KB of metadata in %0.2lf sec\n", metaFile.getSize() / 1024.0, double(clock() - metadownload_starttime) / CLOCKS_PER_SEC);
     }
     #endif
     
@@ -119,7 +121,7 @@ void commandUpdate() {
     localFile.open(localFn.c_str(), StdioFile::Read);
     UpdatePlan plan = info.createUpdatePlan(localFile);
     plan.print();
-    printf("Analysis took %0.2lf sec\n", double(clock() - analysis_starttime) / CLOCKS_PER_SEC);
+    printf("Analyzed %0.0lf KB of local file in %0.2lf sec\n", localFile.getSize() / 1024.0, double(clock() - analysis_starttime) / CLOCKS_PER_SEC);
     
     if (isLocal) {
         StdioFile remoteFile;
@@ -129,18 +131,22 @@ void commandUpdate() {
         plan.createDownloadFile(remoteFile, downloadFile);
     }
     else {
+        int updatedownload_starttime = clock();
         StdioFile downloadFile;
         downloadFile.open(downFn.c_str(), StdioFile::Write);
         CurlDownloader curlWrapper;
         curlWrapper.downloadMissingParts(downloadFile, plan, dataUri.c_str());
+        printf("Downloaded %0.0lf KB of missing blocks in %0.2lf sec\n", downloadFile.getSize() / 1024.0, double(clock() - updatedownload_starttime) / CLOCKS_PER_SEC);
     }
 
+    int updatefile_starttime = clock();
     StdioFile downloadFile;
     downloadFile.open(downFn.c_str(), StdioFile::Read);
     StdioFile resultFile;
     resultFile.open(resultFn.c_str(), StdioFile::Write);
     plan.apply(localFile, downloadFile, resultFile);
     resultFile.flush();
+    printf("Patched %0.0lf KB file in %0.2lf sec\n", resultFile.getSize() / 1024.0, double(clock() - updatefile_starttime) / CLOCKS_PER_SEC);
 
     //===========================================
     int deltatime = clock() - starttime;
