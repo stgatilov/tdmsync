@@ -24,7 +24,7 @@ class CurlDownloader {
     int64_t writtenSize = 0;
 
     static const int BufferSize = 16 << 10;
-    char bufferData[BufferSize + 16];
+    std::vector<char> bufferData;
     int bufferAvail = 0;
 
 public: //private!
