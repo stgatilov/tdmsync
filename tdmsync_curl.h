@@ -19,6 +19,7 @@ class CurlDownloader {
     std::string ranges;
 
     std::string header, boundary;
+    bool isHttp = false, acceptRanges = false;
 
     int64_t writtenSize = 0;
 
@@ -27,7 +28,7 @@ class CurlDownloader {
     int bufferAvail = 0;
 
 public: //private!
-    size_t headerWriteCallback(char *ptr, size_t size, size_t nmemb, bool extractBoundary);
+    size_t headerWriteCallback(char *ptr, size_t size, size_t nmemb);
     size_t plainWriteCallback(char *ptr, size_t size, size_t nmemb);
 
     int performSingle();
