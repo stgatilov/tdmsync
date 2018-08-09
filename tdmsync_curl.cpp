@@ -135,7 +135,7 @@ size_t CurlDownloader::singleWriteCallback(char *ptr, size_t size, size_t nmemb)
 }
 
 int CurlDownloader::performMulti() {
-    memset(bufferData, 0, sizeof(bufferData));
+    bufferData.assign(BufferSize + 16, 0);
 
     auto header_write_callback = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
         return ((CurlDownloader*)userdata)->headerWriteCallback(ptr, size, nmemb);
@@ -160,7 +160,7 @@ size_t CurlDownloader::multiWriteCallback(char *ptr, size_t size, size_t nmemb) 
     size_t bytes = size * nmemb;
     while (bytes > 0) {
         int added = std::min(BufferSize - bufferAvail, (int)bytes);
-        memcpy(bufferData + bufferAvail, ptr, added);
+        memcpy(bufferData.data() + bufferAvail, ptr, added);
         ptr += added;
         bytes -= added;
         bufferAvail += added;
@@ -177,29 +177,29 @@ bool CurlDownloader::processBuffer(bool flush) {
     while (1) {
         static const int TailSize = 1024;
         int end = flush ? bufferAvail - boundary.size() : bufferAvail - TailSize;
-        int delim = findBoundary(bufferData, pos, end);
+        int delim = findBoundary(bufferData.data(), pos, end);
         int until = delim == -1 ? end : delim;
 
-        singleWriteCallback(bufferData + pos, 1, until - pos);
+        singleWriteCallback(&bufferData[pos], 1, until - pos);
         pos = until;
         if (delim == -1)
             break;
         
         pos += boundary.size();
-        if (strncmp(bufferData + pos, "--", 2) == 0) {
+        if (strncmp(&bufferData[pos], "--", 2) == 0) {
             if (!flush)
                 return false;   //premature "end of message"
             break;    //end of message
         }
 
-        char *ptr = strstr(bufferData + pos, "\r\n\r\n");
+        char *ptr = strstr(&bufferData[pos], "\r\n\r\n");
         if (ptr == 0)
             return false;   //internal header must fit into TailSize bytes
-        pos = ptr + 4 - bufferData;
+        pos = ptr + 4 - bufferData.data();
     }
 
     //copy remaining bytes to start of buffer
-    memmove(bufferData, bufferData + pos, bufferAvail - pos);
+    memmove(&bufferData[0], &bufferData[pos], bufferAvail - pos);
     bufferAvail -= pos;
 
     return true;
