@@ -3,3 +3,4 @@ syntax: glob
 *.obj
 *.exe
 *.pk4*
+.mypy_cache
