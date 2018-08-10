@@ -6,9 +6,15 @@
 #include "tsassert.h"
 
 #include "sha1.h"
-#include "buzhash.h"
 
 #define USE_PHF
+#define USE_POLYHASH
+
+#ifndef USE_POLYHASH
+    #include "buzhash.h"
+#else
+    #include "polyhash.h"
+#endif
 
 #ifndef USE_PHF
     #include "binsearch.h"
@@ -27,11 +33,19 @@ uint32_t checksumDigest(uint32_t value) {
 
 uint32_t checksumCompute(const uint8_t *bytes, size_t len) {
     TdmSyncAssert((len & 31) == 0);
+#ifndef USE_POLYHASH
     return buzhash_compute(bytes, len);
+#else
+    return polyhash_compute(bytes, len);
+#endif
 }
 
 uint32_t checksumUpdate(uint32_t value, uint8_t added, uint8_t removed) {
+#ifndef USE_POLYHASH
     return buzhash_fast_update(value, added, removed);
+#else
+    return polyhash_fast_update(value, added, removed);
+#endif
 }
 
 void hashCompute(uint8_t hash[20], const uint8_t *bytes, uint32_t len) {

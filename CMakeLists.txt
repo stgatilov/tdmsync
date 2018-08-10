@@ -25,6 +25,8 @@ set(lib_sources
     sha1.h
     buzhash.c
     buzhash.h
+    polyhash.c
+    polyhash.h
     binsearch.c
     binsearch.h
     phf.h
