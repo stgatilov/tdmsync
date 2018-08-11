@@ -14,6 +14,19 @@ In order to build tdmsync, you should install:
 If you don't want to mess with libcurl, you can set `WITH_CURL=OFF` in CMake configuration.
 Then you don't need to install conan, but you won't be able to update files over HTTP (i.e. you will be limited to local updates).
 
+### Testing
+
+Here is how you can run fuzz-testing.
+
+1. Build tdmsync with libcurl.
+2. `pip install cherrypy`
+3. Copy `fuzz.py` and `cherryserv.py` to directory with binaries.
+4. Run `cherryserv.py` there to start web server.
+5. Run `fuzz.py` to start infinite testing loop.
+
+If you don't want to mess with curl, you can also test local updates.
+To do so, set `g_local = True` in `fuzz.py` and skip steps 2 and 4.
+
 [1]:https://en.wikipedia.org/wiki/Rsync
 [2]:http://zsync.moria.org.uk/
 [3]:http://www.thedarkmod.com/
