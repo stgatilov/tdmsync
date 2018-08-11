@@ -127,7 +127,10 @@ def gen_local(arr: bytearray) -> bytearray:
 
 #========================================
 
-def test_file(orig: bytearray, src: str, dst: str) -> bool:
+g_local = False     # if true, then -file local update is tested
+g_port = 8001       # default port number in cherryserv.py
+
+def test_single(orig: bytearray, src: str, dst: str) -> bool:
     mod = gen_local(orig)
     with open(src, 'wb') as f:
         f.write(orig)
@@ -136,7 +139,11 @@ def test_file(orig: bytearray, src: str, dst: str) -> bool:
     err = os.system('tdmsync prepare %s' % src)
     if err != 0:
         return False
-    err = os.system('tdmsync update -file %s %s 2>nul' % (src, dst))
+    if g_local:
+        cmd = 'tdmsync update -file %s %s 2>nul' % (src, dst)
+    else:
+        cmd = 'tdmsync update -url http://localhost:%d/%s %s 2>nul' % (g_port, src, dst)
+    err = os.system(cmd)
     if err != 0:
         return False
     got = b""
@@ -147,7 +154,7 @@ def test_file(orig: bytearray, src: str, dst: str) -> bool:
 while True:
     orig = gen_input()
     for k in range(10):
-        ok = test_file(orig, 'fuzz_src.dat', 'fuzz_dst.dat')
+        ok = test_single(orig, 'fuzz_src.dat', 'fuzz_dst.dat')
         if not ok:
             sys.exit(0)
             
