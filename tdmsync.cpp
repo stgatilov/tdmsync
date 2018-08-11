@@ -93,9 +93,6 @@ static void readToBuffer(BaseFile &rdFile, std::vector<uint8_t> &buffer, size_t 
     rdFile.read(buffer.data() + buffer.size() - readmore, readmore);
 }
 
-bool operator< (const BlockInfo &a, const BlockInfo &b) {
-    return a.chksum < b.chksum;
-}
 void FileInfo::computeFromFile(BaseFile &rdFile, int blockSize) {
     this->blockSize = blockSize;
     fileSize = rdFile.getSize();
@@ -125,12 +122,13 @@ void FileInfo::computeFromFile(BaseFile &rdFile, int blockSize) {
     TdmSyncAssert(offset == fileSize);
     TdmSyncAssert(rdFile.tell() == fileSize);
 
-    std::sort(blocks.begin(), blocks.end());
+    std::sort(blocks.begin(), blocks.end(), [](const BlockInfo &a, const BlockInfo &b) -> bool {
+        if (a.chksum != b.chksum)
+            return a.chksum < b.chksum;     //main condition: sort by checksum
+        return a.offset < b.offset;         //secondary condition: make order deterministic
+    });
 }
 
-bool operator< (const SegmentUse &a, const SegmentUse &b) {
-    return a.dstOffset < b.dstOffset;
-}
 UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
     int64_t srcFileSize = rdFile.getSize();
     TdmSyncAssert(rdFile.tell() == 0);
@@ -213,7 +211,9 @@ UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
 
     int n = 0;
     if (!result.segments.empty()) {
-        std::sort(result.segments.begin(), result.segments.end());
+        std::sort(result.segments.begin(), result.segments.end(), [](const SegmentUse &a, const SegmentUse &b) -> bool {
+            return a.dstOffset < b.dstOffset;
+        });
         n = 1;
         for (int i = 1; i < result.segments.size(); i++) {
             const auto &curr = result.segments[i];
