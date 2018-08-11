@@ -177,6 +177,8 @@ bool CurlDownloader::processBuffer(bool flush) {
     while (1) {
         static const int TailSize = 1024;
         int end = flush ? bufferAvail - boundary.size() : bufferAvail - TailSize;
+        if (end < pos)
+            break;
         int delim = findBoundary(bufferData.data(), pos, end);
         int until = delim == -1 ? end : delim;
 
