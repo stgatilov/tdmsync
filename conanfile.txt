@@ -6,4 +6,4 @@ libcurl/7.60.0@bincrafters/stable
 
 [options]
 libcurl:with_openssl=False
-libcurl:with_winssl=True
+libcurl:with_winssl=False
