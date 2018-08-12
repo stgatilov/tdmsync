@@ -5,6 +5,8 @@
 
 namespace TdmSync {
 
+//base class for file I/O
+//(user of tdmsync may provide custom backend for accessing files)
 class BaseFile {
 public:
     virtual ~BaseFile() {}
@@ -17,6 +19,7 @@ public:
     virtual void flush() = 0;
 };
 
+//default file I/O based on FILE: fopen/fread/fwrite/fseek/ftell/fflush
 class StdioFile : public BaseFile {
 public:
     StdioFile();
@@ -34,7 +37,7 @@ public:
 
 private:
     OpenMode mode;
-    void *fh;
+    void *fh;       //(FILE*) -- type erased
 };
 
 }
