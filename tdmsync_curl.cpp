@@ -7,6 +7,10 @@
 #undef min
 #undef max
 
+//This code relies on byte ranges concept in HTTP 1.1 protocol.
+//Its specification is available in RFC 7233:
+//  https://www.rfc-editor.org/rfc/pdfrfc/rfc7233.txt.pdf
+
 
 namespace TdmSync {
 
@@ -40,6 +44,7 @@ void CurlDownloader::downloadMeta(BaseFile &wrDownloadFile, const char *url_) {
     TdmSyncAssertF(retCode == CURLE_OK, "Downloading metafile failed: curl error %d", retCode);
 }
 size_t CurlDownloader::plainWriteCallback(char *ptr, size_t size, size_t nmemb) {
+    //note: we can download metainfo file without byte ranges support, but it will be useless then
     if (!isHttp || !acceptRanges)
         return 0;
     downloadFile->write(ptr, size * nmemb);
@@ -55,14 +60,17 @@ static const char *startsWith(const std::string &line, const char *prefix){
 size_t CurlDownloader::headerWriteCallback(char *ptr, size_t size, size_t nmemb) {
     size_t bytes = size * nmemb;
     std::string added(ptr, ptr + bytes);
-    header += added;
+    header += added;    //curl calls callback once per each line of header
 
     if (startsWith(added, "HTTP"))
-        isHttp = true;
+        isHttp = true;          //this class is tied to HTTP multi-byte-range behavior
     if (startsWith(added, "Accept-Ranges: bytes"))
-        acceptRanges = true;
+        acceptRanges = true;    //differential update is impossible without byte ranges
+
+    //check if this is a multipart response for multi-byte-range request
     if (auto ptr = startsWith(added, "Content-Type: multipart/byteranges; boundary=")) {
         int pos = ptr - added.c_str();
+        //save boundary string for parsing the response
         std::string token = added.substr(pos, added.size() - 2 - pos);
         boundary = "\r\n--" + token;// + "\r\n";
     }
@@ -97,6 +105,7 @@ void CurlDownloader::downloadMissingParts(BaseFile &wrDownloadFile, const Update
     TdmSyncAssert(totalSize == plan->bytesRemote);
 
     int retCode = -1;
+    //note: single range and multiple range cases are completely different!
     if (totalCount == 0)
         return;                     //nothing to download: empty file is OK
     else if (totalCount == 1)
@@ -124,11 +133,12 @@ int CurlDownloader::performSingle() {
     return curl_easy_perform(curl);
 }
 size_t CurlDownloader::singleWriteCallback(char *ptr, size_t size, size_t nmemb) {
+    //with single byte range request, curl returns only/exactly the requested data
     if (!isHttp || !acceptRanges)
-        return 0;
+        return 0;                   //fail early if accept-ranges clause not present in header
     size_t bytes = size * nmemb;
     if (writtenSize + bytes > totalSize)
-        return 0;
+        return 0;                   //protection against webserver sending the whole file to us
     downloadFile->write(ptr, bytes);
     writtenSize += bytes;
     return nmemb;
@@ -155,10 +165,28 @@ int CurlDownloader::performMulti() {
     return retCode;
 }
 size_t CurlDownloader::multiWriteCallback(char *ptr, size_t size, size_t nmemb) {
+    //with multiple byte range request, curl returns data segments separated by some http headers
+    //this is how curl multipart response looks like (without indents):
+    /*================================================================
+
+    --5b69c45c39b6
+    Content-type: text/plain
+    Content-range: bytes 100-200/5896303
+    
+    s8d7f8767fds765fg8765sdf87g65g87s65d8f765sd87f6g58s7d6f587s6d5f87s65df76s8df7g68s7df6g876sdf8g76g7677
+    --5b69c45c39b6
+    Content-type: text/plain
+    Content-range: bytes 300-400/5896303
+    
+    87hdf98j5fg785jfg675j8f76ghj8675gh6j75fg87g5j8d7f6g587s65g87d6g5f8h67d5gf75d8fg675h8d6f7g5h6d75gf7865
+    --5b69c45c39b6--
+    ================================================================*/
+
     if (!isHttp || !acceptRanges || boundary.empty())
-        return 0;
+        return 0;                   //fail early if no boundary was specified in response header
     size_t bytes = size * nmemb;
     while (bytes > 0) {
+        //push incoming data from curl into our internal buffer
         int added = std::min(BufferSize - bufferAvail, (int)bytes);
         memcpy(bufferData.data() + bufferAvail, ptr, added);
         ptr += added;
@@ -171,36 +199,49 @@ size_t CurlDownloader::multiWriteCallback(char *ptr, size_t size, size_t nmemb) 
     return nmemb;
 }
 bool CurlDownloader::processBuffer(bool flush) {
-    bufferData[bufferAvail] = 0;
+    //when this method is called, the following invariant holds:
+    //  1. the start of the buffer is inside some segment's data (i.e. NOT inside the http header/boundary)
+    //  2. one of the following is true:
+    //     a. the buffer is full
+    //     b. the buffer contains the very last bytes of the response, and flush = true
+
+    bufferData[bufferAvail] = 0;    //null-terminate for string routines
+
+    //size of transition zone at the end of the buffer
+    //we postpone all boundaries inside transition zone until the next call (except when flush = true)
+    //note: it is critically important that this constant is larger than any potential internal http header!
+    static const int TailSize = 1024;
 
     int pos = 0;
     while (1) {
-        static const int TailSize = 1024;
         int end = flush ? bufferAvail - boundary.size() : bufferAvail - TailSize;
         if (end < pos)
-            break;
+            break;      //last http header ended inside transition zone already
         int delim = findBoundary(bufferData.data(), pos, end);
         int until = delim == -1 ? end : delim;
-
+        //write the data from current position to the next found boundary or to start of transition zone
         singleWriteCallback(&bufferData[pos], 1, until - pos);
         pos = until;
         if (delim == -1)
-            break;
-        
+            break;      //no more boundaries in the buffer
+
+        //handle http boundary
         pos += boundary.size();
         if (strncmp(&bufferData[pos], "--", 2) == 0) {
+            //this is the final boundary in the response
             if (!flush)
-                return false;   //premature "end of message"
-            break;    //end of message
+                return false;   //premature "end of response"
+            break;    //end of response
         }
-
+        //handle http header (skip it)
         char *ptr = strstr(&bufferData[pos], "\r\n\r\n");
         if (ptr == 0)
             return false;   //internal header must fit into TailSize bytes
         pos = ptr + 4 - bufferData.data();
     }
 
-    //copy remaining bytes to start of buffer
+    //copy the remaining bytes to the beginning of buffer
+    //usually, this is the transition zone or a part of it
     memmove(&bufferData[0], &bufferData[pos], bufferAvail - pos);
     bufferAvail -= pos;
 

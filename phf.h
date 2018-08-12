@@ -7,6 +7,7 @@
 #include <vector>
 #include <random>
 
+//tdmsync perfect hash function library
 namespace TdmPhf {
 
 typedef std::mt19937 RndGen;
@@ -53,6 +54,7 @@ struct PerfectHashFunc {
     }
 
     void create(const uint32_t *keys, size_t num) {
+        //choose size of auxilliary arrays: power-of-two, at least max(3*n, 32)
         logSize = 5;
         while ((1ULL << logSize) < 3 * num)
             logSize++;
@@ -117,7 +119,7 @@ struct PerfectHashFunc {
                 }
             }
 
-        } while (!ok);
+        } while (!ok);          //note: expected O(1) iterations
     }
 };
 

@@ -1,8 +1,11 @@
 #include "polyhash.h"
 
+//C = -B^n mod P    (n --- window length)
+//precomputed by polyhash_compute
 uint32_t POLYHASH_NEGATOR;
 
 uint32_t polyhash_compute(const uint8_t *data, size_t len) {
+    //hash(reversed(S)) = sum_i (S_i * B^i) mod P
     uint32_t res = 0;
     uint32_t pw = 1;
     for (size_t i = 0; i < len; i++) {

@@ -5,10 +5,19 @@
 
 #include "tsassert.h"
 
-#include "sha1.h"
-
+//specifies which search algorithm to use to find similar blocks in metainfo
+//perfect hash function is used when macro is defined, branchless binary search is used otherwise
+//PHF is known to be faster but is a bit more complicated (if it has bugs, then it can even hang)
 #define USE_PHF
+
+//specifies which rolling hash (checksum) to use for blocks
+//note: this macro affects format of .tdmsync files!
+//simple polynomial hash is used when macro is defined, buzhash is used otherwise
+//while buzhash is faster on low level, it has no collision guarantees,
+//  has low quality, and exhibits quadratic behavior easily
 #define USE_POLYHASH
+
+#include "sha1.h"
 
 #ifndef USE_POLYHASH
     #include "buzhash.h"
@@ -99,6 +108,7 @@ void FileInfo::computeFromFile(BaseFile &rdFile, int blockSize) {
     TdmSyncAssert(rdFile.tell() == 0);
     blocks.clear();
 
+    //always download whole file if its size is less than block size
     if (fileSize < blockSize)
         return;
 
@@ -108,6 +118,8 @@ void FileInfo::computeFromFile(BaseFile &rdFile, int blockSize) {
     std::vector<uint8_t> buffer(blockSize);
     int64_t offset = 0;
     for (int i = 0; i < blockCount; i++) {
+        //note: the last block always has same size and ends at the end of file
+        //so it usually overlaps the pre-last block
         int64_t readmore = std::min(fileSize - offset, int64_t(blockSize));
         readToBuffer(rdFile, buffer, readmore);
         offset += readmore;
@@ -135,6 +147,7 @@ UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
     UpdatePlan result;
 
     if (srcFileSize >= blockSize) {
+        //copy checksums into simple array, prepare search algorithm on them
         size_t num = blocks.size();
         std::vector<uint32_t> checksums(num);
         for (int i = 0; i < num; i++)
@@ -148,16 +161,20 @@ UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
         binary_search_branchless_precompute(&binsearcher, num);
         #endif
 
+        //buffer with the latest data from local file
+        //when sliding window gets to the end of buffer, we move remaining data to start and read some more
         std::vector<uint8_t> buffer(2 * blockSize);
         rdFile.read(buffer.data(), std::min((int64_t)buffer.size(), srcFileSize));
         uint32_t currChksum = checksumCompute(buffer.data(), blockSize);
-
-        std::vector<char> foundBlocks(blocks.size(), false);
-        uint64_t sumCount = 0;
+        //the current sliding window ends at this position in buffer
         size_t buffPtr = blockSize;
 
+        //for each block from metainfo file: whether it has already been found in local file
+        std::vector<char> foundBlocks(blocks.size(), false);
+        uint64_t sumCount = 0;
+
+        //the current sliding window starts at "offset" position within local file
         for (int64_t offset = 0; offset + blockSize <= srcFileSize; offset++) {
-            //if ((offset & ((1<<20)-1)) == 0) fprintf(stderr, "%d\n", (int)offset);
             uint32_t digest = checksumDigest(currChksum);
 
             #ifdef USE_PHF
@@ -167,12 +184,14 @@ UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
             #endif
 
             if (idx < num && checksums[idx] == digest) {
+                //at least one block's checksum equals checksum of the current window
                 uint32_t left = idx;
                 uint32_t right = left;
                 while (right < num && checksums[right] == digest)
                     right++;
 
                 sumCount += (right - left);
+                //optimization: do not compute slow hash of current window, if we already found matches for all block candidates 
                 int newFound = 0;
                 for (int j = left; j < right; j++) if (!foundBlocks[j])
                     newFound++;
@@ -180,9 +199,10 @@ UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
                 if (newFound > 0) {
                     uint8_t currHash[BlockInfo::HASH_SIZE];
                     hashCompute(currHash, &buffer[buffPtr - blockSize], blockSize);
+
                     for (int j = left; j < right; j++) if (!foundBlocks[j]) {
                         if (memcmp(blocks[j].hash, currHash, sizeof(currHash)) != 0)
-                            continue;
+                            continue;   //note: this happens only due to checksum collisions, i.e. very rarely
 
                         foundBlocks[j] = true;
                         SegmentUse seg;
@@ -196,12 +216,14 @@ UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
             }
 
             if (offset + blockSize == srcFileSize)
-                break;
+                break;  //end of local file
             if (buffPtr == buffer.size()) {
+                //current sliding window hit the end of the buffer
                 size_t readmore = std::min((int64_t)buffer.size() - blockSize, srcFileSize - offset - blockSize);
                 readToBuffer(rdFile, buffer, readmore);
                 buffPtr -= readmore;
             }
+            //move current window by one byte and update rolling checksum
             currChksum = checksumUpdate(currChksum, buffer[buffPtr], buffer[buffPtr - blockSize]);
             buffPtr++;
         }
@@ -215,6 +237,7 @@ UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
             return a.dstOffset < b.dstOffset;
         });
         n = 1;
+        //concatenate found local blocks into larger segments (wherever possible)
         for (int i = 1; i < result.segments.size(); i++) {
             const auto &curr = result.segments[i];
             auto &last = result.segments[n-1];
@@ -228,6 +251,7 @@ UpdatePlan FileInfo::createUpdatePlan(BaseFile &rdFile) const {
 
     int64_t lastCovered = 0;
     int64_t downloadSize = 0;
+    //detect all uncovered blocks in metainfo and create remote segments for them
     for (int i = 0; i <= n; i++) {
         int64_t offset = i < n ? result.segments[i].dstOffset : fileSize;
         int64_t size = i < n ? result.segments[i].size : 0;

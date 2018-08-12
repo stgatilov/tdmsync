@@ -1,5 +1,6 @@
 #include "buzhash.h"
 
+//pseudorandom numbers
 const uint32_t buzhash_table[256] = {
     0x458be752, 0xc10748cc, 0xfbbcdbb8, 0x6ded5b68,
     0xb10a82b5, 0x20d75648, 0xdfc5665f, 0xa8428801,
@@ -74,6 +75,7 @@ static INLINE uint32_t rol(uint32_t v, uint32_t s) {
 }
 
 uint32_t buzhash_compute(const uint8_t *data, size_t len) {
+    //hash(reversed(S)) = xor_i (T[S_i] <<< i)       <<< - rotate bits left
     uint32_t res = 0;
     for (size_t i = 0; i < len; i++)
         res ^= rol(buzhash_table[data[i]], len-1 - i);
