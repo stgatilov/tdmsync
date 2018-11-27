@@ -93,7 +93,7 @@ void CurlDownloader::downloadMissingParts(BaseFile &wrDownloadFile, const Update
 
     //create http byte-ranges string
     ranges.clear();
-    for (int i = 0; i < plan->segments.size(); i++) {
+    for (size_t i = 0; i < plan->segments.size(); i++) {
         const auto &seg = plan->segments[i];
         if (seg.remote) {
             char buff[256];

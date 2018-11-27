@@ -1,3 +1,4 @@
+#pragma warning(disable: 4244)	//conversion from 'uint64_t' to 'long', possible loss of data
 #include "fileio.h"
 #include <stdio.h>
 #include <stdexcept>

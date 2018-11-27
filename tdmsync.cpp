@@ -1,3 +1,5 @@
+#pragma warning(disable: 4244)	//conversion from 'uint64_t' to 'int', possible loss of data
+#pragma warning(disable: 4018)	//'<' : signed/unsigned mismatch
 #include "tdmsync.h"
 #include <inttypes.h>
 #include <vector>
