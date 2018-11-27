@@ -41,6 +41,9 @@ void CurlDownloader::downloadMeta(BaseFile &wrDownloadFile, const char *url_) {
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)this);
 
     int retCode = curl_easy_perform(curl);
+    long httpCode = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    TdmSyncAssertF(httpCode == 0 || httpCode / 100 == 2, "Downloading metafile failed: http response %d", (int)httpCode);
     TdmSyncAssertF(retCode == CURLE_OK, "Downloading metafile failed: curl error %d", retCode);
 }
 size_t CurlDownloader::plainWriteCallback(char *ptr, size_t size, size_t nmemb) {
@@ -113,6 +116,9 @@ void CurlDownloader::downloadMissingParts(BaseFile &wrDownloadFile, const Update
     else //totalCount > 1
         retCode = performMulti();   //download with multi-ranges
 
+    long httpCode = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    TdmSyncAssertF(httpCode == 0 || httpCode / 100 == 2, "Downloading missing parts failed: http response %d", (int)httpCode);
     TdmSyncAssertF(retCode == CURLE_OK, "Downloading missing parts failed: curl error %d", retCode);
     TdmSyncAssertF(writtenSize == totalSize, "Size of output file is wrong: " PRId64 " instead of " PRId64, writtenSize, totalSize);
 }
