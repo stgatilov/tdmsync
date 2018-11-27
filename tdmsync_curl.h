@@ -9,6 +9,11 @@
 
 namespace TdmSync {
 
+struct HttpError : public BaseError {
+    int code;
+    HttpError(const char *message, int code) : BaseError(message + std::to_string(code)), code(code) {}
+};
+
 //implements tdmsync differential update over HTTP 1.1 protocol (using curl)
 class CurlDownloader {
 public:
