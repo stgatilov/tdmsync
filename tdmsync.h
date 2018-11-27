@@ -3,10 +3,16 @@
 
 #include <stdint.h>
 #include <vector>
+#include <stdexcept>
 #include "fileio.h"
 
 
 namespace TdmSync {
+
+//base exception thrown by tdmsync when something fails
+struct BaseError : public std::runtime_error {
+    BaseError(const std::string &message) : std::runtime_error(message) {}
+};
 
 //an element of update plan: says that some segment should be taken from some place
 struct SegmentUse {
