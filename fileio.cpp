@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdexcept>
 #include "tsassert.h"
+#include "tdmsync.h"
 
 
 namespace TdmSync {
