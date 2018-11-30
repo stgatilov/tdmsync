@@ -14,17 +14,13 @@
 
 namespace TdmSync {
 
-CurlDownloader::~CurlDownloader() {
-    if (curl)
-        curl_easy_cleanup(curl);
+void CurlDownloader::clear() {
+    *this = CurlDownloader();
 }
 
 
 void CurlDownloader::downloadMeta(BaseFile &wrDownloadFile, const char *url_) {
-    TdmSyncAssertF(!curl, "Each CurlDownloader object must be used only once");
-    curl = curl_easy_init();
-    TdmSyncAssertF(curl, "Failed to initialize curl");
-
+    clear();
     downloadFile = &wrDownloadFile;
     url = url_;
 
@@ -34,15 +30,16 @@ void CurlDownloader::downloadMeta(BaseFile &wrDownloadFile, const char *url_) {
     auto plain_write_callback = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
         return ((CurlDownloader*)userdata)->plainWriteCallback(ptr, size, nmemb);
     };
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, (curl_write_callback)header_write_callback);
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void*)this);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, (curl_write_callback)plain_write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)this);
+    std::unique_ptr<CURL, void (*)(CURL*)> curl(curl_easy_init(), curl_easy_cleanup);
+    TdmSyncAssertF(curl, "Failed to initialize curl");
+    curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl.get(), CURLOPT_HEADERFUNCTION, (curl_write_callback)header_write_callback);
+    curl_easy_setopt(curl.get(), CURLOPT_HEADERDATA, (void*)this);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, (curl_write_callback)plain_write_callback);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, (void*)this);
 
-    int retCode = curl_easy_perform(curl);
-    long httpCode = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    int retCode = curl_easy_perform(curl.get());
+    curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &httpCode);
     TdmSyncAssertF(httpCode == 0 || httpCode / 100 == 2, "Downloading metafile failed: http response %d", (int)httpCode);
     TdmSyncAssertF(retCode == CURLE_OK, "Downloading metafile failed: curl error %d", retCode);
 }
@@ -83,24 +80,23 @@ size_t CurlDownloader::headerWriteCallback(char *ptr, size_t size, size_t nmemb)
 
 
 void CurlDownloader::downloadMissingParts(BaseFile &wrDownloadFile, const UpdatePlan &plan_, const char *url_) {
-    TdmSyncAssertF(!curl, "Each CurlDownloader object must be used only once");
-    curl = curl_easy_init();
-    TdmSyncAssertF(curl, "Failed to initialize curl");
-
+    clear();
     downloadFile = &wrDownloadFile;
     plan = &plan_;
     url = url_;
 
     //create http byte-ranges string
     ranges.clear();
+    rangesString.clear();
     for (size_t i = 0; i < plan->segments.size(); i++) {
         const auto &seg = plan->segments[i];
         if (seg.remote) {
             char buff[256];
             sprintf(buff, "%" PRId64 "-%" PRId64, seg.dstOffset, seg.dstOffset + seg.size - 1);
             if (!ranges.empty())
-                ranges += ',';
-            ranges += buff;
+                rangesString += ',';
+            rangesString += buff;
+            ranges.push_back(buff);
             totalCount++;
             totalSize += seg.size;
         }
@@ -110,14 +106,18 @@ void CurlDownloader::downloadMissingParts(BaseFile &wrDownloadFile, const Update
     int retCode = -1;
     //note: single range and multiple range cases are completely different!
     if (totalCount == 0)
-        return;                     //nothing to download: empty file is OK
+        return;                         //nothing to download: empty file is OK
     else if (totalCount == 1)
-        retCode = performSingle();  //download with single byte-range
-    else //totalCount > 1
-        retCode = performMulti();   //download with multi-ranges
+        retCode = performSingle();      //download with single byte-range
+    else {  //totalCount > 1
+        retCode = performMulti();       //download with multi-ranges
+        if (retCode != CURLE_OK) {
+            downloadFile->seek(0);
+            writtenSize = 0, httpCode = 0;
+            //retCode = performMany();  //download with many pipelines requests, one range in each
+        }
+    }
 
-    long httpCode = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
     TdmSyncAssertF(httpCode == 0 || httpCode / 100 == 2, "Downloading missing parts failed: http response %d", (int)httpCode);
     TdmSyncAssertF(retCode == CURLE_OK, "Downloading missing parts failed: curl error %d", retCode);
     TdmSyncAssertF(writtenSize == totalSize, "Size of output file is wrong: " PRId64 " instead of " PRId64, writtenSize, totalSize);
@@ -130,13 +130,17 @@ int CurlDownloader::performSingle() {
     auto single_write_callback = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
         return ((CurlDownloader*)userdata)->singleWriteCallback(ptr, size, nmemb);
     };
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, (curl_write_callback)header_write_callback);
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void*)this);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, (curl_write_callback)single_write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)this);
-    curl_easy_setopt(curl, CURLOPT_RANGE, ranges.c_str());
-    return curl_easy_perform(curl);
+    std::unique_ptr<CURL, void (*)(CURL*)> curl(curl_easy_init(), curl_easy_cleanup);
+    TdmSyncAssertF(curl, "Failed to initialize curl");
+    curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl.get(), CURLOPT_HEADERFUNCTION, (curl_write_callback)header_write_callback);
+    curl_easy_setopt(curl.get(), CURLOPT_HEADERDATA, (void*)this);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, (curl_write_callback)single_write_callback);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, (void*)this);
+    curl_easy_setopt(curl.get(), CURLOPT_RANGE, rangesString.c_str());
+    int ret = curl_easy_perform(curl.get());
+    curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &httpCode);
+    return ret;
 }
 size_t CurlDownloader::singleWriteCallback(char *ptr, size_t size, size_t nmemb) {
     //with single byte range request, curl returns only/exactly the requested data
@@ -151,6 +155,8 @@ size_t CurlDownloader::singleWriteCallback(char *ptr, size_t size, size_t nmemb)
 }
 
 int CurlDownloader::performMulti() {
+    std::unique_ptr<CURL, void (*)(CURL*)> curl(curl_easy_init(), curl_easy_cleanup);
+    TdmSyncAssertF(curl, "Failed to initialize curl");
     bufferData.assign(BufferSize + 16, 0);
 
     auto header_write_callback = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
@@ -159,15 +165,16 @@ int CurlDownloader::performMulti() {
     auto multi_write_callback = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
         return ((CurlDownloader*)userdata)->multiWriteCallback(ptr, size, nmemb);
     };
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, (curl_write_callback)header_write_callback);
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void*)this);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, (curl_write_callback)multi_write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)this);
-    curl_easy_setopt(curl, CURLOPT_RANGE, ranges.c_str());
+    curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl.get(), CURLOPT_HEADERFUNCTION, (curl_write_callback)header_write_callback);
+    curl_easy_setopt(curl.get(), CURLOPT_HEADERDATA, (void*)this);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, (curl_write_callback)multi_write_callback);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, (void*)this);
+    curl_easy_setopt(curl.get(), CURLOPT_RANGE, rangesString.c_str());
 
-    int retCode = curl_easy_perform(curl);
+    int retCode = curl_easy_perform(curl.get());
     processBuffer(true);    //flush our own buffer
+    curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &httpCode);
     return retCode;
 }
 size_t CurlDownloader::multiWriteCallback(char *ptr, size_t size, size_t nmemb) {

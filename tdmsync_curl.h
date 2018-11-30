@@ -17,8 +17,6 @@ struct HttpError : public BaseError {
 //implements tdmsync differential update over HTTP 1.1 protocol (using curl)
 class CurlDownloader {
 public:
-    ~CurlDownloader();  //(frees curl context automatically)
-
     //download the metainfo file from specified url into specified file
     //you can then deserialize it and create an update plan for local file using it
     void downloadMeta(BaseFile &wrDownloadFile, const char *url);
@@ -28,6 +26,8 @@ public:
     void downloadMissingParts(BaseFile &wrDownloadFile, const UpdatePlan &plan, const char *url);
 
 private:
+    void clear();
+
     size_t headerWriteCallback(char *ptr, size_t size, size_t nmemb);
     size_t plainWriteCallback(char *ptr, size_t size, size_t nmemb);
 
@@ -40,20 +40,25 @@ private:
     int findBoundary(const char *ptr, int from, int to) const;
 
 private:
+    //input data from user
     BaseFile *downloadFile = nullptr;
     const UpdatePlan *plan = nullptr;
     std::string url;
 
-    CURL *curl = nullptr;
-
+    //byte ranges we have to download
     int64_t totalCount = 0, totalSize = 0;
-    std::string ranges;
+    std::vector<std::string> ranges;
+    std::string rangesString;
 
+    //intermediate data: header / boundary of HTTP response
     std::string header, boundary;
     bool isHttp = false, acceptRanges = false;
+    long httpCode = 0;
 
+    //how much bytes we have written to file
     int64_t writtenSize = 0;
 
+    //intermediate data: only for "performMulti"
     static const int BufferSize = 16 << 10;
     std::vector<char> bufferData;
     int bufferAvail = 0;
