@@ -113,7 +113,10 @@ void CurlDownloader::downloadMissingParts(BaseFile &wrDownloadFile, const Update
         retCode = performSingle();      //download with single byte-range
     else {  //totalCount > 1
         retCode = performMulti();       //download with multi-ranges
-        if (retCode != CURLE_OK) {
+        if (retCode == CURLE_OK)
+            usedMultipart = true;
+        else {
+            usedMultipart = false;
             downloadFile->seek(0);
             mainWorkRange.written = 0, httpCode = 0;
             retCode = performMany();  //download with many pipelines requests, one range in each

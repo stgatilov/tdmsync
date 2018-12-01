@@ -25,6 +25,10 @@ public:
     //this invokes multi-byte-range HTTP requests which needs proper web server support
     void downloadMissingParts(BaseFile &wrDownloadFile, const UpdatePlan &plan, const char *url);
 
+    //call after the request to learn if multipart byteranges were used
+    //usually used for status/logging
+    bool usedMultipartByteranges() const { return usedMultipart; }
+
 private:
     struct WorkRange;
 
@@ -57,6 +61,7 @@ private:
     //intermediate data: header / boundary of HTTP response
     std::string header, boundary;
     bool isHttp = false, acceptRanges = false;
+    bool usedMultipart = false;
     long httpCode = 0;
 
     //how much bytes we have written to file
