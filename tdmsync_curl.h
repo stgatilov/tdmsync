@@ -25,9 +25,16 @@ public:
     //this invokes multi-byte-range HTTP requests which needs proper web server support
     void downloadMissingParts(BaseFile &wrDownloadFile, const UpdatePlan &plan, const char *url);
 
-    //call after the request to learn if multipart byteranges were used
+    enum DownloadMode {
+        dmUnknown,              //not yet done anything =)
+        dmNone,                 //nothing to download: file already correct
+        dmSingleByterange,      //only one chunk was downloaded (using byterange request)
+        dmMultipartByterange,   //used multipart byteranges request to download all chunks
+        dmManyByteranges,       //had to fallback to many requests with single byterange in each
+    };
+    //call after the request to learn which download mode was used
     //usually used for status/logging
-    bool usedMultipartByteranges() const { return usedMultipart; }
+    DownloadMode getModeUsed() const { return usedMode; }
 
 private:
     struct WorkRange;
@@ -61,7 +68,7 @@ private:
     //intermediate data: header / boundary of HTTP response
     std::string header, boundary;
     bool isHttp = false, acceptRanges = false;
-    bool usedMultipart = false;
+    DownloadMode usedMode = dmUnknown;
     long httpCode = 0;
 
     //how much bytes we have written to file
