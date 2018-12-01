@@ -102,6 +102,8 @@ void CurlDownloader::downloadMissingParts(BaseFile &wrDownloadFile, const Update
         }
     }
     TdmSyncAssert(totalSize == plan->bytesRemote);
+    mainWorkRange.start = mainWorkRange.written = 0;
+    mainWorkRange.end = totalSize;
 
     int retCode = -1;
     //note: single range and multiple range cases are completely different!
@@ -113,14 +115,17 @@ void CurlDownloader::downloadMissingParts(BaseFile &wrDownloadFile, const Update
         retCode = performMulti();       //download with multi-ranges
         if (retCode != CURLE_OK) {
             downloadFile->seek(0);
-            writtenSize = 0, httpCode = 0;
-            //retCode = performMany();  //download with many pipelines requests, one range in each
+            mainWorkRange.written = 0, httpCode = 0;
+            retCode = performMany();  //download with many pipelines requests, one range in each
         }
     }
 
     TdmSyncAssertF(httpCode == 0 || httpCode / 100 == 2, "Downloading missing parts failed: http response %d", (int)httpCode);
     TdmSyncAssertF(retCode == CURLE_OK, "Downloading missing parts failed: curl error %d", retCode);
-    TdmSyncAssertF(writtenSize == totalSize, "Size of output file is wrong: " PRId64 " instead of " PRId64, writtenSize, totalSize);
+    TdmSyncAssertF(mainWorkRange.written == mainWorkRange.end - mainWorkRange.start,
+        "Size of output file is wrong: %" PRId64 " instead of %" PRId64,
+        mainWorkRange.written, mainWorkRange.end - mainWorkRange.start
+    );
 }
 
 int CurlDownloader::performSingle() {
@@ -128,7 +133,7 @@ int CurlDownloader::performSingle() {
         return ((CurlDownloader*)userdata)->headerWriteCallback(ptr, size, nmemb);
     };
     auto single_write_callback = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
-        return ((CurlDownloader*)userdata)->singleWriteCallback(ptr, size, nmemb);
+        return ((CurlDownloader*)userdata)->singleWriteCallback(ptr, size, nmemb, NULL);
     };
     std::unique_ptr<CURL, void (*)(CURL*)> curl(curl_easy_init(), curl_easy_cleanup);
     TdmSyncAssertF(curl, "Failed to initialize curl");
@@ -142,16 +147,83 @@ int CurlDownloader::performSingle() {
     curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &httpCode);
     return ret;
 }
-size_t CurlDownloader::singleWriteCallback(char *ptr, size_t size, size_t nmemb) {
+size_t CurlDownloader::singleWriteCallback(char *ptr, size_t size, size_t nmemb, WorkRange *work) {
+    if (!work) work = &mainWorkRange;
     //with single byte range request, curl returns only/exactly the requested data
     if (!isHttp || !acceptRanges)
         return 0;                   //fail early if accept-ranges clause not present in header
     size_t bytes = size * nmemb;
-    if (writtenSize + bytes > totalSize)
+    int64_t pos = work->start + work->written;
+    if (pos + bytes > work->end)
         return 0;                   //protection against webserver sending the whole file to us
+    //write data exactly to the proposed position
+    if (downloadFile->tell() != pos)
+        downloadFile->seek(pos);
     downloadFile->write(ptr, bytes);
-    writtenSize += bytes;
+    //increment written amount for global and possibly local account
+    work->written += bytes;
+    if (work != &mainWorkRange)
+        mainWorkRange.written += bytes;
     return nmemb;
+}
+
+int CurlDownloader::performMany() {
+    std::unique_ptr<CURLM, CURLMcode (*)(CURLM*)> curl(curl_multi_init(), curl_multi_cleanup);
+    TdmSyncAssertF(curl, "Failed to initialize curl");
+    curl_multi_setopt(curl.get(), CURLMOPT_PIPELINING, CURLPIPE_HTTP1 | CURLPIPE_MULTIPLEX);
+
+    struct Handle {
+        CurlDownloader *owner;
+        WorkRange work;
+    };
+    int k = ranges.size();
+    std::vector<Handle> handles(k);
+    auto header_write_callback = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
+        Handle *handle = (Handle*)userdata;
+        return handle->owner->headerWriteCallback(ptr, size, nmemb);
+    };
+    auto single_write_callback = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
+        Handle *handle = (Handle*)userdata;
+        return handle->owner->singleWriteCallback(ptr, size, nmemb, &handle->work);
+    };
+
+    std::vector<std::unique_ptr<CURL, void (*)(CURL*)>> requests;
+    int64_t filePos = 0;
+    for (int i = 0; i < k; i++) {
+        int64_t from, to, delta;
+        int parsed = sscanf(ranges[i].c_str(), "%" SCNd64 "-%" SCNd64, &from, &to);
+        delta = to - from + 1;
+        TdmSyncAssert(parsed == 2);
+        handles[i].owner = this;
+        handles[i].work = WorkRange{filePos, filePos + delta, 0};
+        filePos += delta;
+
+        requests.emplace_back(curl_easy_init(), curl_easy_cleanup);
+        auto curlE = requests[i].get();
+        curl_easy_setopt(curlE, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curlE, CURLOPT_HEADERFUNCTION, (curl_write_callback)header_write_callback);
+        curl_easy_setopt(curlE, CURLOPT_HEADERDATA, &handles[i]);
+        curl_easy_setopt(curlE, CURLOPT_WRITEFUNCTION, (curl_write_callback)single_write_callback);
+        curl_easy_setopt(curlE, CURLOPT_WRITEDATA, &handles[i]);
+        curl_easy_setopt(curlE, CURLOPT_RANGE, ranges[i].c_str());
+        curl_multi_add_handle(curl.get(), curlE);
+
+        /*//for testing only (comment curl_multi_add_handle line too)
+        auto err = curl_easy_perform(curlE);
+        requests[i].reset();*/
+    }
+
+    int running = -1, numfds, nofdsCnt = 0;
+    while (1) {
+        CURLMcode code = curl_multi_perform(curl.get(), &running);
+        TdmSyncAssertF(code == CURLM_OK, "curl_multi_perform returned %d", code);
+        if (running == 0)
+            break;
+        code = curl_multi_wait(curl.get(), NULL, 0, 1000, &numfds);
+        TdmSyncAssertF(code == CURLM_OK, "curl_multi_wait returned %d", code);
+    }
+
+    return CURLE_OK;
 }
 
 int CurlDownloader::performMulti() {
@@ -233,7 +305,7 @@ bool CurlDownloader::processBuffer(bool flush) {
         int delim = findBoundary(bufferData.data(), pos, end);
         int until = delim == -1 ? end : delim;
         //write the data from current position to the next found boundary or to start of transition zone
-        singleWriteCallback(&bufferData[pos], 1, until - pos);
+        singleWriteCallback(&bufferData[pos], 1, until - pos, NULL);
         pos = until;
         if (delim == -1)
             break;      //no more boundaries in the buffer

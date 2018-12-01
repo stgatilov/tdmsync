@@ -26,18 +26,22 @@ public:
     void downloadMissingParts(BaseFile &wrDownloadFile, const UpdatePlan &plan, const char *url);
 
 private:
+    struct WorkRange;
+
     void clear();
 
     size_t headerWriteCallback(char *ptr, size_t size, size_t nmemb);
     size_t plainWriteCallback(char *ptr, size_t size, size_t nmemb);
 
     int performSingle();
-    size_t singleWriteCallback(char *ptr, size_t size, size_t nmemb);
+    size_t singleWriteCallback(char *ptr, size_t size, size_t nmemb, WorkRange *work);
 
     int performMulti();
     size_t multiWriteCallback(char *ptr, size_t size, size_t nmemb);
     bool processBuffer(bool flush);
     int findBoundary(const char *ptr, int from, int to) const;
+
+    int performMany();
 
 private:
     //input data from user
@@ -56,7 +60,11 @@ private:
     long httpCode = 0;
 
     //how much bytes we have written to file
-    int64_t writtenSize = 0;
+    struct WorkRange {
+        int64_t start = 0, end = 0;
+        int64_t written = 0;
+    };
+    WorkRange mainWorkRange;
 
     //intermediate data: only for "performMulti"
     static const int BufferSize = 16 << 10;
