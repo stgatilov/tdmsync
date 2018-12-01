@@ -2,10 +2,20 @@
 #include <inttypes.h>
 #include <vector>
 #include <algorithm>
+#include <memory>
 
 #include "tsassert.h"
 #undef min
 #undef max
+
+//support curl versions prior to 7.43.0:
+#ifndef CURLPIPE_HTTP1
+    #define CURLPIPE_HTTP1 1
+#endif
+#ifndef CURLPIPE_MULTIPLEX
+    #define CURLPIPE_MULTIPLEX 0
+#endif
+
 
 //This code relies on byte ranges concept in HTTP 1.1 protocol.
 //Its specification is available in RFC 7233:
@@ -214,7 +224,11 @@ int CurlDownloader::performMany() {
         delta = to - from + 1;
         TdmSyncAssert(parsed == 2);
         handles[i].owner = this;
-        handles[i].work = WorkRange{filePos, filePos + delta, 0};
+        WorkRange wr;
+        wr.start = filePos;
+        wr.end = filePos + delta;
+        wr.written = 0;
+        handles[i].work = wr;
         filePos += delta;
 
         requests.emplace_back(curl_easy_init(), curl_easy_cleanup);
