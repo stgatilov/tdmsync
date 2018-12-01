@@ -106,16 +106,18 @@ void CurlDownloader::downloadMissingParts(BaseFile &wrDownloadFile, const Update
     mainWorkRange.end = totalSize;
 
     int retCode = -1;
-    //note: single range and multiple range cases are completely different!
     if (totalCount == 0)
         return;                         //nothing to download: empty file is OK
-    else if (totalCount == 1)
-        retCode = performSingle();      //download with single byte-range
-    else {  //totalCount > 1
+    else if (totalCount == 1) {
+        //retCode = performSingle();      //download with single byte-range
+        retCode = performMany();        //(use the same code as for many requests)
+    }
+    else {
         retCode = performMulti();       //download with multi-ranges
         if (retCode == CURLE_OK)
             usedMultipart = true;
         else {
+            //multi-ranges not supported, send many single-range requests instead
             usedMultipart = false;
             downloadFile->seek(0);
             mainWorkRange.written = 0, httpCode = 0;
@@ -131,6 +133,12 @@ void CurlDownloader::downloadMissingParts(BaseFile &wrDownloadFile, const Update
     );
 }
 
+//=======================================================================
+//      performSingle: download one byte range
+//                     superseeded by performMany
+//=======================================================================
+
+#if 0
 int CurlDownloader::performSingle() {
     auto header_write_callback = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
         return ((CurlDownloader*)userdata)->headerWriteCallback(ptr, size, nmemb);
@@ -150,6 +158,7 @@ int CurlDownloader::performSingle() {
     curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &httpCode);
     return ret;
 }
+#endif
 size_t CurlDownloader::singleWriteCallback(char *ptr, size_t size, size_t nmemb, WorkRange *work) {
     if (!work) work = &mainWorkRange;
     //with single byte range request, curl returns only/exactly the requested data
@@ -169,6 +178,11 @@ size_t CurlDownloader::singleWriteCallback(char *ptr, size_t size, size_t nmemb,
         mainWorkRange.written += bytes;
     return nmemb;
 }
+
+//=======================================================================
+//        performMany: download many byte ranges as separate requests
+//               note: works slowly unless HTTP2 is present
+//=======================================================================
 
 int CurlDownloader::performMany() {
     std::unique_ptr<CURLM, CURLMcode (*)(CURLM*)> curl(curl_multi_init(), curl_multi_cleanup);
@@ -228,6 +242,11 @@ int CurlDownloader::performMany() {
 
     return CURLE_OK;
 }
+
+//=======================================================================
+//       performMulti: download all byte ranges with one request
+//               note: needs multipart byteranges to be supported
+//=======================================================================
 
 int CurlDownloader::performMulti() {
     std::unique_ptr<CURL, void (*)(CURL*)> curl(curl_easy_init(), curl_easy_cleanup);
