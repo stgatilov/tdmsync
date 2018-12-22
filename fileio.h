@@ -1,6 +1,7 @@
 #ifndef _TDM_SYNC_FILEIO_H_028375_
 #define _TDM_SYNC_FILEIO_H_028375_
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace TdmSync {

@@ -2,6 +2,7 @@
 #pragma warning(disable: 4018)	//'<' : signed/unsigned mismatch
 #include "tdmsync.h"
 #include <inttypes.h>
+#include <string.h>
 #include <vector>
 #include <algorithm>
 
