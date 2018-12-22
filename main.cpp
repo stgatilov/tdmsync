@@ -130,6 +130,7 @@ void commandUpdate() {
         downloadFile.open(downFn.c_str(), StdioFile::Write);
         plan.createDownloadFile(remoteFile, downloadFile);
     }
+    #ifdef WITH_CURL
     else {
         int updatedownload_starttime = clock();
         StdioFile downloadFile;
@@ -138,6 +139,7 @@ void commandUpdate() {
         curlWrapper.downloadMissingParts(downloadFile, plan, dataUri.c_str());
         printf("Downloaded %0.0lf KB of missing blocks in %0.2lf sec\n", downloadFile.getSize() / 1024.0, double(clock() - updatedownload_starttime) / CLOCKS_PER_SEC);
     }
+    #endif
 
     int updatefile_starttime = clock();
     StdioFile downloadFile;

@@ -2,6 +2,7 @@
 #define _TDM_BINARY_SEARCH_203876_H_
 
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {

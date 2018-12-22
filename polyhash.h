@@ -2,6 +2,7 @@
 #define _TDM_POLYHASH_H_665168_
 
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef _MSC_VER
 #define INLINE __inline

@@ -2,6 +2,7 @@
 #define _TDM_BUZHASH_H_237623_
 
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef _MSC_VER
 #define INLINE __inline
