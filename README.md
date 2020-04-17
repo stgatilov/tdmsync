@@ -1,3 +1,5 @@
+*Migrated from: https://bitbucket.org/stgatilov/tdmsync/*
+
 # tdmsync
 
 This library allows to update local file to its remote version stored on web server.
