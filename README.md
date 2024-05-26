@@ -20,7 +20,7 @@ Then you don't need to install conan, but you won't be able to update files over
 
 Here is how you can run fuzz-testing.
 
-1. Build tdmsync with libcurl.
+1. Build tdmsync with libcurl (see `build.bat`).
 2. `pip install cherrypy`
 3. Copy `fuzz.py` and `cherryserv.py` to directory with binaries.
 4. Run `cherryserv.py` there to start web server.

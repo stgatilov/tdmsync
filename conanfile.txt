@@ -1,9 +1,9 @@
 [generators]
-cmake
+CMakeDeps
+CMakeToolchain
 
 [requires]
-libcurl/7.60.0@bincrafters/stable
+libcurl/8.6.0
 
 [options]
-libcurl:with_openssl=False
-libcurl:with_winssl=False
+libcurl/*:with_ssl=False
